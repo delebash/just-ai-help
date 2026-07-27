@@ -117,14 +117,12 @@ npm run translate
 
 ```bash
 ollama serve
-ollama pull <model>
+ollama pull gemma3:12b
 ```
 
-then set `"engine": "ollama"` and `"model": "<model>"`. No API key.
-
-**No model is recommended here yet.** An earlier version of this file named one that had
-never been run; the recommendation is written by measurement (see *Measured* below), not by
-picking a plausible size.
+then set `"engine": "ollama"`. No API key. `gemma3:12b` is the profile default because it
+**won a bake-off**, not because it sounded right — see *Measured* below. Set `"model"` in
+your config to use anything else `ollama list` shows.
 
 This uses the **native** Ollama engine rather than Ollama's OpenAI-compatible `/v1`, because
 compat layers are consistently less complete than native APIs — Google's returns bodyless
@@ -155,13 +153,35 @@ by hand and later runs leave it alone. `--force` overrides the whole delta.
 Against a 40-key sample of a real app's catalog — chosen to break things: every plural-pipe
 key, 20 interpolations, the long named-slot paragraphs, glossary terms, and short labels.
 
+### The local bake-off (2026-07-27, two full runs each, scored by the checks above)
+
+| | **gemma3:12b** | qwen3:8b |
+|---|---|---|
+| translated | 40/40 · 40/40 | 40/40 · 40/40 |
+| **structural** failures | **0 · 0** | **0 · 0** |
+| semantic flags | **1 · 2** | 3 · 7 |
+| missing `¿` (`startpunc`) | **0 · 0** | 1 · 5 |
+| length vs English | 1.16× | 1.15× |
+| time | 227 s · 219 s | 160 s · 116 s |
+
+Winner: **gemma3:12b** — fewest flags among the structurally clean. Time is only the
+tiebreak and was never reached.
+
+**The finding worth keeping.** Both models were told the Spanish `¿` rule in the same system
+prompt. gemma3 obeyed it 5 times out of 5, twice. qwen3 missed it 5 times out of 5 on one run
+and 1 of 5 on the other — unreliable rather than simply wrong, which is worse to plan around.
+So that failure is **not prompt-fixable**; it is a model choice. That is exactly what a
+bake-off is for, and it is why the structural/semantic split matters: on structure the two
+models are indistinguishable, and structure is all a translator checks about itself.
+
+### Earlier engine measurements (same corpus, before the loop was ours)
+
 | | Gemini 3.6 Flash (free) | local Gemma-26B on an 8 GB card |
 |---|---|---|
 | translated | 40/40 | 40/40 |
 | placeholders intact | 40/40 | 40/40 |
 | plural halves identical (bug) | 0 | 1 |
 | glossary held | 5/5 | 5/5 |
-| length vs English | 1.14× | 1.13× |
 | time | 94 s | 147 s |
 
 Short labels blow up worst (1.5× on a 10-character nav item), so sidebars overflow before

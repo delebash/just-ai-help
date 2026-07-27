@@ -37,11 +37,13 @@
   "ollama": {
     "kind": "ollama",
     "url": "http://127.0.0.1:11434",
-    "model": "REQUIRED — whatever `ollama list` shows",
+    "model": "gemma3:12b",
     "batchSize": 16,
     "timeoutMs": 300000,
     "maxOutputTokens": 8192,
     "_note": "THE recommended local option: one install, `ollama pull <model>`, done. No API key. Uses Ollama's NATIVE /api/chat, not its OpenAI-compatible /v1 — compat layers are consistently less complete than native APIs. maxOutputTokens is raised from Ollama's own default of 2048, which starves a thinking model: deliberation eats the budget and the answer is never written.",
+    "_model_why": "gemma3:12b won a two-model bake-off on 2026-07-27, scored mechanically, two full corpus runs each. Both models were structurally perfect — 40/40 keys, 0 placeholder/plural/glossary failures — so the winner is the one with fewer SEMANTIC flags: gemma3:12b 1 and 2, qwen3:8b 3 and 7. The decisive one is startpunc, the missing Spanish opening ¿: gemma3 0 and 0, qwen3 1 and 5, with the conventions rule in the system prompt for BOTH. That answers the question the bake-off existed to ask — qwen3's ¿ failure is NOT reliably prompt-fixable, so the fix is the model. gemma3:12b costs about 2x the wall time (219-227 s vs 116-160 s for the 40-key corpus) and time is only the tiebreak, which was never reached. Override `model` in your config for anything `ollama list` shows.",
+
     "_think_why": "`think` is deliberately absent, with no default either way. Measured 2026-07-27 on qwen3:8b: thinking off is 13x faster (27 s -> 2 s) but it TRANSLATED THE PLACEHOLDER, returning \"{nota} nota | {nota} notas\" where the thinking run returned \"{n} nota | {n} notas\". Off is a speed/quality trade on structured text, not a free win.",
     "_timeout_why": "the 40-key corpus at batch 16 is 3 requests and qwen3:8b took 205 s for the run, so ~68 s for the worst batch. 300 s is ~4x that, with headroom for a cold model load.",
     "_setup": "ollama serve   then:   ollama pull <model>",
