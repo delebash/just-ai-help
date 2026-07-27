@@ -141,6 +141,22 @@ implementation), to save you one Ollama install.
 
 ## Fixing what it gets wrong
 
+### The review page
+
+```bash
+node src/review.mjs just-ai-help.config.json --lang es    # http://localhost:4780
+```
+
+One `node:http` server, one HTML page, no framework, no build, no dependencies, no account
+and no database — **the JSON files are the state**, the same ones git already tracks.
+Flagged rows are pinned to the top with their reason as a chip; edit in place, it saves on
+blur, re-runs the checks for that key and updates the counts. Saving one value leaves the
+file byte-identical except that value (the nested structure is rebuilt from the *source*
+file's shape, so key order never churns) — a one-word fix produces a one-line diff, which is
+what makes reviewing a reviewer's work possible. There is a test for exactly that.
+
+### Or just edit the JSON
+
 The output is plain JSON in git. Edit it.
 
 **Corrections survive re-runs.** A key is re-translated only when its target is missing or
