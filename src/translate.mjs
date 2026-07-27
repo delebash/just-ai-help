@@ -90,6 +90,12 @@ async function translateInto(lang, subset, profile, { force: forceThese }) {
 	const outPath = join(localesDir, `${lang}.json`);
 	const existing = existsSync(outPath) ? flatten(JSON.parse(readFileSync(outPath, "utf8"))) : {};
 
+	const write = (values) => {
+		const merged = { ...existing, ...values };
+		writeFileSync(outPath, `${JSON.stringify(rebuild(sourceRaw, merged), null, 2)}\n`);
+		return merged;
+	};
+
 	const { values, failed, requests } = await translateLanguage({
 		sourceFlat: subset,
 		existingFlat: forceThese ? {} : existing,
@@ -98,10 +104,13 @@ async function translateInto(lang, subset, profile, { force: forceThese }) {
 		cfg: { ...cfg, conventionsLine: conventions[lang]?.promptLine ?? "" },
 		cachePath: resolve(".jah-cache.json"),
 		force: forceThese,
+		// Written after every batch, so an interrupted hour-long run resumes from where it
+		// stopped instead of starting over. The file is always complete-and-valid JSON —
+		// just with fewer keys until the run finishes.
+		onBatch: write,
 	});
 
-	const merged = { ...existing, ...values };
-	writeFileSync(outPath, `${JSON.stringify(rebuild(sourceRaw, merged), null, 2)}\n`);
+	const merged = write(values);
 	console.log(`${lang}: wrote ${Object.keys(values).length} keys in ${requests} request(s)`);
 	if (failed.length) {
 		// Left untranslated and said so. Never silently skipped, and the exit code is

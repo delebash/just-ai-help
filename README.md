@@ -32,7 +32,7 @@ them.
 node src/translate.mjs config.json                    # translate what changed, then check
 node src/translate.mjs config.json --check-only       # check the files on disk. No engine. CI.
 node src/translate.mjs config.json --force            # re-translate everything
-node src/translate.mjs config.json --escalate openai  # re-run ONLY the flagged keys, elsewhere
+node src/translate.mjs config.json --escalate <prof> # re-run ONLY the flagged keys, elsewhere
 node src/review.mjs     config.json --lang es         # the review page
 npm test                                              # node --test, 23 tests, no deps
 ```
@@ -185,7 +185,7 @@ by hand and later runs leave it alone. `--force` overrides the whole delta.
 ### Escalate the flagged keys to a better engine
 
 ```bash
-node src/translate.mjs config.json --escalate openai
+node src/translate.mjs config.json --escalate <engine-profile>
 ```
 
 Checks what is on disk, re-translates **only the keys the checks flagged** with the named

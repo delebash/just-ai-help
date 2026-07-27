@@ -11,5 +11,12 @@
     "doNotTranslate": ["Acme", "Smart Pantry"]
   },
 
-  "engine": "gemini-free"
+  "engine": "ollama",
+
+  "_optional": {
+    "model": "override the engine profile's model — required for a local server, whose model id is whatever YOU serve",
+    "url": "override the engine profile's base URL",
+    "think": "ollama only: false | true | 'low' | 'medium' | 'high'. Omitted = the model's own default. Off is much faster and measurably worse on placeholders.",
+    "profile": "any other engine-profile field, overridden per project — batchSize, rateLimitMs, timeoutMs, maxOutputTokens, headers, extraBody"
+  }
 }

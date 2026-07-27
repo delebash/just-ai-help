@@ -256,6 +256,7 @@ export async function translateLanguage({
 	cachePath,
 	force = false,
 	log = console.log,
+	onBatch,
 }) {
 	const re = placeholderRe(cfg.placeholder);
 	const contextHash = sha1(cfg.context ?? "");
@@ -352,9 +353,15 @@ export async function translateLanguage({
 			}
 			if (!done) failed.push(item.key);
 		}
+		// Flush after every batch, not once at the end. A full catalogue is an hour of local
+		// generation and a crash at minute 55 must not throw away 54 minutes of it. BOTH
+		// halves are needed for that: the cache alone would not resume anything, because the
+		// delta skips a key only when the cache entry AND the existing target value are
+		// present — so `onBatch` is what writes the partial locale file.
+		writeFileSync(cachePath, JSON.stringify(cache, null, 2));
+		onBatch?.(values);
 		log(`  ${lang}: ${Object.keys(values).length}/${Object.keys(sourceFlat).length} done (batch ${bi + 1}/${batches.length})`);
 	}
 
-	writeFileSync(cachePath, JSON.stringify(cache, null, 2));
 	return { values, failed, requests };
 }
