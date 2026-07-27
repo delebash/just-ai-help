@@ -61,18 +61,41 @@ A translator that **exits 0 even when it skipped keys** makes a broken run and a
 identical to CI — the behaviour that started this project. So the tool re-reads the files that
 were written and asserts:
 
-- nothing missing
-- placeholders unchanged (`{n}`, `{into}`, named slots)
-- `doNotTranslate` terms still in the source language
-- plural forms keep their halves — **and the halves differ from each other**
+| code | what it catches |
+|---|---|
+| `missing` | the key has no translation at all |
+| `blank` | the target is empty or whitespace |
+| `placeholder-changed` | `{n}`, `{into}`, named slots — added, dropped or rewritten |
+| `plural-halves-lost` | a plural form disappeared |
+| `plural-halves-identical` | both halves came back the same |
+| `glossary-translated` | a `doNotTranslate` term was translated anyway |
+| `untranslated` | identical to the source (exempting strings that are only placeholders and glossary terms) |
+| `startpunc` | the target language's opening mark is missing — Spanish `¿` / `¡` |
+| `endpunc` | terminal punctuation does not match the source's |
+| `numbers` | a quantity changed |
+| `brackets` | a `()`, `[]` or `{}` wrapper was dropped or duplicated |
+| `doublewords` | a word repeated back to back — a generation stutter |
+| `whitespace` | leading or trailing spacing differs from the source |
 
-That last one is the only check that catches this, which passes every structural test and is
-still wrong:
+The test list is the Translate Toolkit's `pofilter` — decades of distilled knowledge about
+what goes wrong in translation. Its *tests* are the spec; its Python is not imported.
+
+`plural-halves-identical` is the one nothing else catches. It passes every structural test —
+right separator, right placeholders, right word count — and is still wrong:
 
 ```
 en: "Delete {n} autosave? | Delete {n} autosaves?"
 es: "¿Eliminar {n} autoguardados? | ¿Eliminar {n} autoguardados?"
 ```
+
+`startpunc` is the one that shows why prompting is not enough. Told the Spanish rule
+explicitly in the system prompt, qwen3:8b still missed the opening `¿` on **5 of 5** questions
+— and so did lingo.dev's run. Every check has a test that hands it a deliberately broken
+string and asserts it complains (`npm test`, `node --test`, zero dependencies), because a
+check that has never been seen to fail is indistinguishable from one that cannot.
+
+Every finding is `{ key, code, detail }` — one shape, because this list is not only the CI
+gate, it is the feed the review page triages on.
 
 ## Quick start
 

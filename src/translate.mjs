@@ -18,7 +18,9 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { flatten, rebuild, translateLanguage } from "./loop.mjs";
+import { buildContext, runChecks, summarise } from "./checks.mjs";
+import { flatten, rebuild } from "./jsonutil.mjs";
+import { translateLanguage } from "./loop.mjs";
 
 const argv = process.argv.slice(2);
 // --check-only re-runs the output checks over the locale files already on disk, without
@@ -39,6 +41,11 @@ const localesDir = resolve(cfg.localesDir);
 const sourceFile = join(localesDir, `${cfg.sourceLanguage}.json`);
 const sourceRaw = JSON.parse(readFileSync(sourceFile, "utf8"));
 const src = flatten(sourceRaw);
+
+// Conventions the target language requires regardless of what the source did. Read on both
+// paths: the loop puts `promptLine` in the prompt, the checks use `pairedPunct` to find out
+// whether the model listened. Shipped for Spanish only, on purpose.
+const conventions = JSON.parse(readFileSync(new URL("./conventions.json", import.meta.url), "utf8"));
 
 if (!checkOnly) {
 	const base = engines[cfg.engine];
@@ -63,11 +70,6 @@ if (!checkOnly) {
 		console.error(`Set ${profile.apiKeyEnv} — the engine "${cfg.engine}" needs it.`);
 		process.exit(1);
 	}
-
-	// Conventions the target language requires regardless of what the source did. Shipped
-	// for Spanish only, on purpose: inventing another language's rules from memory is how
-	// a confident wrong rule gets into every future translation.
-	const conventions = JSON.parse(readFileSync(new URL("./conventions.json", import.meta.url), "utf8"));
 
 	console.log(`Translating ${cfg.sourceLanguage} -> ${cfg.targets.join(", ")} via ${cfg.engine} (${profile.model})`);
 	const started = Date.now();
@@ -102,9 +104,6 @@ if (!checkOnly) {
 }
 
 // ── post-checks — verify the FILES that were written, not the run that wrote them ──────
-const placeholders = (s) =>
-	(s.match(new RegExp(`\\${cfg.placeholder.prefix}\\w+\\${cfg.placeholder.suffix}`, "g")) || []).sort().join(",");
-
 let failed = 0;
 for (const lang of cfg.targets) {
 	const outPath = join(localesDir, `${lang}.json`);
@@ -114,37 +113,16 @@ for (const lang of cfg.targets) {
 		continue;
 	}
 	const dst = flatten(JSON.parse(readFileSync(outPath, "utf8")));
+	const findings = runChecks({ sourceFlat: src, targetFlat: dst, ctx: buildContext(cfg, conventions, lang) });
+	const translated = Object.keys(src).filter((k) => dst[k]).length;
 
-	const missing = Object.keys(src).filter((k) => !dst[k]);
-	const phBad = Object.keys(src).filter((k) => dst[k] && placeholders(src[k]) !== placeholders(dst[k]));
-
-	// Plural forms: same number of halves, and — the real catch — halves that differ.
-	const sep = cfg.pluralSeparator;
-	const plural = sep ? Object.keys(src).filter((k) => src[k].includes(sep) && dst[k]) : [];
-	const countBad = plural.filter((k) => dst[k].split(sep).length !== src[k].split(sep).length);
-	const sameBad = plural.filter((k) => {
-		const halves = dst[k].split(sep).map((h) => h.trim());
-		return new Set(halves).size !== halves.length;
-	});
-
-	const notKept = (cfg.glossary?.doNotTranslate ?? []).flatMap((term) =>
-		Object.keys(src).filter((k) => src[k].includes(term) && dst[k] && !dst[k].includes(term)),
-	);
-
-	const report = [
-		["missing", missing],
-		["placeholders changed", phBad],
-		["plural halves lost", countBad],
-		["plural halves IDENTICAL", sameBad],
-		["glossary term translated", notKept],
-	];
-	console.log(`\n${lang}: ${Object.keys(src).length - missing.length}/${Object.keys(src).length} translated`);
-	for (const [label, keys] of report) {
-		if (!keys.length) continue;
-		failed += keys.length;
-		console.log(`  ${label} (${keys.length}): ${keys.slice(0, 8).join(", ")}${keys.length > 8 ? " …" : ""}`);
+	console.log(`\n${lang}: ${translated}/${Object.keys(src).length} translated`);
+	for (const [code, list] of summarise(findings)) {
+		failed += list.length;
+		const keys = list.map((f) => f.key);
+		console.log(`  ${code} (${list.length}): ${keys.slice(0, 8).join(", ")}${keys.length > 8 ? " …" : ""}`);
 	}
-	if (!report.some(([, k]) => k.length)) console.log("  all checks passed");
+	if (!findings.length) console.log("  all checks passed");
 }
 // Set the code, don't call process.exit(). Exiting hard while an I/O handle is still
 // closing is what tripped a libuv assertion here on 2026-07-27, turning a clean pass into
