@@ -268,7 +268,10 @@ export async function translateLanguage({
 		conventionsLine,
 	});
 
-	const cache = force ? {} : loadCache(cachePath);
+	// Always LOAD the cache, even under --force. `force` means "re-translate these keys
+	// anyway", not "throw away what every other key and language already learned" — starting
+	// from {} and then writing the file back would delete all of it as a side effect.
+	const cache = loadCache(cachePath);
 	const values = {};
 	const todo = [];
 

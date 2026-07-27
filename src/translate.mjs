@@ -14,7 +14,12 @@
 //      back IDENTICAL — it passes every structural test and is still wrong.
 //   3. REVIEW    — src/review.mjs, the local triage page.
 //
-// Usage:  node src/translate.mjs [config.json] [--check-only] [--force]
+// Usage:
+//   node src/translate.mjs [config.json]                  translate what changed, then check
+//                          --force                        re-translate everything
+//                          --check-only                   check the files on disk, no engine
+//                          --escalate <profile>           re-translate ONLY the flagged keys
+//                                                         with a stronger engine profile
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -28,7 +33,9 @@ const argv = process.argv.slice(2);
 // also how the checks themselves get tested — corrupt a locale file, confirm it fails.
 const checkOnly = argv.includes("--check-only");
 const force = argv.includes("--force");
-const configPath = argv.find((a) => !a.startsWith("--")) || "just-ai-help.config.json";
+const escalateTo = argv.includes("--escalate") ? argv[argv.indexOf("--escalate") + 1] : null;
+const escalateIdx = escalateTo ? argv.indexOf("--escalate") + 1 : -1;
+const configPath = argv.find((a, i) => !a.startsWith("--") && i !== escalateIdx) || "just-ai-help.config.json";
 
 if (!existsSync(configPath)) {
 	console.error(`No config at ${configPath}`);
@@ -47,61 +54,100 @@ const src = flatten(sourceRaw);
 // whether the model listened. Shipped for Spanish only, on purpose.
 const conventions = JSON.parse(readFileSync(new URL("./conventions.json", import.meta.url), "utf8"));
 
-if (!checkOnly) {
-	const base = engines[cfg.engine];
+/** Resolves an engines.json row into a runnable profile, or exits with a usable message. */
+function resolveProfile(name, { applyConfigOverrides }) {
+	const base = engines[name];
 	if (!base) {
 		const known = Object.keys(engines).filter((k) => !k.startsWith("_")).join(", ");
-		console.error(`Unknown engine "${cfg.engine}". Known: ${known}`);
+		console.error(`Unknown engine "${name}". Known: ${known}`);
 		process.exit(1);
 	}
-
-	// The config may override anything on the profile — the model id above all, because a
-	// local server's model id is whatever YOU serve and the profile cannot know it.
-	const profile = { ...base, ...(cfg.profile ?? {}) };
-	if (cfg.model) profile.model = cfg.model;
-	if (cfg.url) profile.url = cfg.url;
-	if (cfg.think !== undefined) profile.think = cfg.think;
-
+	const profile = { ...base, ...(applyConfigOverrides ? (cfg.profile ?? {}) : {}) };
+	if (applyConfigOverrides) {
+		// The config may override anything on the profile — the model id above all, because a
+		// local server's model id is whatever YOU serve and the profile cannot know it. An
+		// ESCALATION profile deliberately takes none of these: the point of escalating is to
+		// run somewhere else, and inheriting the config's model would silently defeat it.
+		if (cfg.model) profile.model = cfg.model;
+		if (cfg.url) profile.url = cfg.url;
+		if (cfg.think !== undefined) profile.think = cfg.think;
+	}
 	if (!profile.model || profile.model.startsWith("REQUIRED")) {
-		console.error(`Engine "${cfg.engine}" needs a model id — set "model" in your config.`);
+		console.error(`Engine "${name}" needs a model id — set "model" in your config.`);
 		process.exit(1);
 	}
 	if (profile.apiKeyEnv && !process.env[profile.apiKeyEnv]) {
-		console.error(`Set ${profile.apiKeyEnv} — the engine "${cfg.engine}" needs it.`);
+		console.error(`Set ${profile.apiKeyEnv} — the engine "${name}" needs it.`);
 		process.exit(1);
 	}
+	return profile;
+}
 
-	console.log(`Translating ${cfg.sourceLanguage} -> ${cfg.targets.join(", ")} via ${cfg.engine} (${profile.model})`);
+let hardFailures = 0;
+
+/** Translates `subset` for one language and merges the result over what is already there. */
+async function translateInto(lang, subset, profile, { force: forceThese }) {
+	const outPath = join(localesDir, `${lang}.json`);
+	const existing = existsSync(outPath) ? flatten(JSON.parse(readFileSync(outPath, "utf8"))) : {};
+
+	const { values, failed, requests } = await translateLanguage({
+		sourceFlat: subset,
+		existingFlat: forceThese ? {} : existing,
+		lang,
+		profile,
+		cfg: { ...cfg, conventionsLine: conventions[lang]?.promptLine ?? "" },
+		cachePath: resolve(".jah-cache.json"),
+		force: forceThese,
+	});
+
+	const merged = { ...existing, ...values };
+	writeFileSync(outPath, `${JSON.stringify(rebuild(sourceRaw, merged), null, 2)}\n`);
+	console.log(`${lang}: wrote ${Object.keys(values).length} keys in ${requests} request(s)`);
+	if (failed.length) {
+		// Left untranslated and said so. Never silently skipped, and the exit code is
+		// non-zero — a broken run and a good run must not look the same to CI.
+		hardFailures += failed.length;
+		console.error(`${lang}: ${failed.length} key(s) exhausted every retry: ${failed.slice(0, 8).join(", ")}${failed.length > 8 ? " …" : ""}`);
+	}
+	return merged;
+}
+
+if (escalateTo) {
+	// Escalation: check what is on disk, re-translate ONLY what the checks flagged, with a
+	// different (stronger, or simply different-failing) engine, then re-check and show the
+	// before/after. The cheap half of the catalogue stays where it is; the expensive engine
+	// is spent only on the keys that earned it.
+	const profile = resolveProfile(escalateTo, { applyConfigOverrides: false });
+	console.log(`Escalating flagged keys to "${escalateTo}" (${profile.model})`);
 	const started = Date.now();
-	let hardFailures = 0;
 
 	for (const lang of cfg.targets) {
 		const outPath = join(localesDir, `${lang}.json`);
-		const existing = existsSync(outPath) ? flatten(JSON.parse(readFileSync(outPath, "utf8"))) : {};
-		const conv = conventions[lang];
-
-		const { values, failed, requests } = await translateLanguage({
-			sourceFlat: src,
-			existingFlat: existing,
-			lang,
-			profile,
-			cfg: { ...cfg, conventionsLine: conv?.promptLine ?? "" },
-			cachePath: resolve(".jah-cache.json"),
-			force,
-		});
-
-		writeFileSync(outPath, `${JSON.stringify(rebuild(sourceRaw, values), null, 2)}\n`);
-		console.log(`${lang}: wrote ${Object.keys(values).length} keys in ${requests} request(s)`);
-		if (failed.length) {
-			// Left untranslated and said so. Never silently skipped, and the exit code below
-			// is non-zero — a broken run and a good run must not look the same to CI.
-			hardFailures += failed.length;
-			console.error(`${lang}: ${failed.length} key(s) exhausted every retry: ${failed.slice(0, 8).join(", ")}${failed.length > 8 ? " …" : ""}`);
+		if (!existsSync(outPath)) {
+			console.error(`${lang}: nothing to escalate — no ${lang}.json yet. Translate first.`);
+			hardFailures++;
+			continue;
 		}
+		const ctx = buildContext(cfg, conventions, lang);
+		const before = runChecks({ sourceFlat: src, targetFlat: flatten(JSON.parse(readFileSync(outPath, "utf8"))), ctx });
+		const keys = [...new Set(before.map((f) => f.key))];
+		console.log(`${lang}: ${before.length} finding(s) across ${keys.length} key(s) before`);
+		if (!keys.length) continue;
+
+		const subset = Object.fromEntries(keys.map((k) => [k, src[k]]));
+		const merged = await translateInto(lang, subset, profile, { force: true });
+		const after = runChecks({ sourceFlat: src, targetFlat: merged, ctx });
+		console.log(`${lang}: ${before.length} -> ${after.length} finding(s), ${keys.length} -> ${new Set(after.map((f) => f.key)).size} key(s)`);
 	}
 	console.log(`Elapsed ${((Date.now() - started) / 1000).toFixed(1)}s`);
-	if (hardFailures) process.exitCode = 1;
+} else if (!checkOnly) {
+	const profile = resolveProfile(cfg.engine, { applyConfigOverrides: true });
+	console.log(`Translating ${cfg.sourceLanguage} -> ${cfg.targets.join(", ")} via ${cfg.engine} (${profile.model})`);
+	const started = Date.now();
+	for (const lang of cfg.targets) await translateInto(lang, src, profile, { force });
+	console.log(`Elapsed ${((Date.now() - started) / 1000).toFixed(1)}s`);
 }
+if (hardFailures) process.exitCode = 1;
 
 // ── post-checks — verify the FILES that were written, not the run that wrote them ──────
 let failed = 0;

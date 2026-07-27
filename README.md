@@ -20,6 +20,23 @@ them.
 > [`i18n-ai-translate`](https://github.com/taahamahdi/i18n-ai-translate) and that wrapper is
 > gone — see *Why the loop is ours* below.
 
+## Three layers
+
+| | file | what it is |
+|---|---|---|
+| 1. **Translate** | `src/loop.mjs` | the batch loop — shielding, batching, retry, cache, two transports. Commodity, and ours anyway, for the reason below |
+| 2. **Verify** | `src/checks.mjs` | the checks. **The differentiator** — nothing else does content QA on what a translator wrote |
+| 3. **Review** | `src/review.mjs` | triage: one local page, flagged rows first, edit, save, re-check |
+
+```bash
+node src/translate.mjs config.json                    # translate what changed, then check
+node src/translate.mjs config.json --check-only       # check the files on disk. No engine. CI.
+node src/translate.mjs config.json --force            # re-translate everything
+node src/translate.mjs config.json --escalate openai  # re-run ONLY the flagged keys, elsewhere
+node src/review.mjs     config.json --lang es         # the review page
+npm test                                              # node --test, 23 tests, no deps
+```
+
 ## Why the loop is ours
 
 Every quality failure measured on 2026-07-27 had one cause: **the request body belonged to
@@ -100,11 +117,12 @@ gate, it is the feed the review page triages on.
 ## Quick start
 
 ```bash
-npm install
 cp just-ai-help.config.example.json just-ai-help.config.json   # then edit it
 export GEMINI_API_KEY=...            # free tier, no card: aistudio.google.com
 npm run translate
 ```
+
+There is no `npm install` step — there is nothing to install.
 
 > **The Gemini free tier is a smoke test, not an engine.** Measured 2026-07-27: **20
 > requests per day, per model** (quotaId `GenerateRequestsPerDayPerProjectPerModel-FreeTier`).
@@ -163,6 +181,30 @@ The output is plain JSON in git. Edit it.
 when something that could change the answer changed — the source text, the language, the
 context sentence or the glossary, hashed together into `.jah-cache.json`. Edit a target value
 by hand and later runs leave it alone. `--force` overrides the whole delta.
+
+### Escalate the flagged keys to a better engine
+
+```bash
+node src/translate.mjs config.json --escalate openai
+```
+
+Checks what is on disk, re-translates **only the keys the checks flagged** with the named
+engine profile, merges, re-checks, and prints before → after. The cheap engine does the
+catalogue; the expensive one is spent on the few keys that earned it. The escalation profile
+deliberately ignores your config's `model`/`url` overrides — the point is to run somewhere
+else, and inheriting them would silently defeat that.
+
+Measured on a deliberately corrupted first pass (5 keys broken by hand across every failure
+class), qwen3:8b's output escalated to gemma3:12b:
+
+```
+es: 16 finding(s) across 11 key(s) before
+es: wrote 11 keys in 1 request(s)
+es: 16 -> 1 finding(s), 11 -> 1 key(s)          83.6 s
+```
+
+Ten keys changed; the eleventh came back identical and stayed flagged, which is the honest
+outcome rather than a hidden one.
 
 ## Measured
 
