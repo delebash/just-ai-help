@@ -122,21 +122,17 @@ const TEMPERATURE = 0.2;
 // make Google's compat endpoint unexpressible, which is not a hypothetical — it is the
 // one cloud row we have a key for.
 
-async function callModel({ profile, system, user }) {
+/**
+ * Builds the URL, headers and request body for one call. Separated from the fetch so it can
+ * be asserted on without a model running — owning the request body is the entire reason this
+ * loop exists, which would be an odd thing to leave untested.
+ */
+export function buildRequest({ profile, system, user }) {
 	const key = profile.apiKeyEnv ? process.env[profile.apiKeyEnv] : "";
 	const messages = [
 		{ role: "system", content: system },
 		{ role: "user", content: user },
 	];
-	// An explicit controller, not AbortSignal.timeout(). The convenience form leaves a live
-	// timer behind after the fetch resolves, and a process that then calls process.exit()
-	// while that handle is closing trips a libuv assertion on Windows
-	// (`!(handle->flags & UV_HANDLE_CLOSING)`, exit code 127) — observed 2026-07-27 on Node
-	// v26.5.0 immediately after a run that had otherwise passed every check. A CI gate whose
-	// exit code is decided by a race is worse than no gate.
-	const controller = new AbortController();
-	const timer = setTimeout(() => controller.abort(), profile.timeoutMs ?? 300000);
-	const signal = controller.signal;
 
 	let url;
 	let body;
@@ -174,6 +170,32 @@ async function callModel({ profile, system, user }) {
 	// LAST, verbatim. The general pass-through: think:false, chat_template_kwargs,
 	// reasoning_effort, a provider's private knob — all of them are config, not code.
 	Object.assign(body, profile.extraBody ?? {});
+	// …with ONE exception. `options` is where Ollama keeps num_ctx, num_predict, temperature
+	// and seed, so a verbatim overwrite of it would silently drop the temperature and the
+	// output cap the moment anyone set num_ctx — precisely the class of invisible
+	// request-body damage this loop exists to prevent. It merges one level deep instead.
+	if (profile.kind === "ollama" && profile.extraBody?.options) {
+		body.options = {
+			temperature: TEMPERATURE,
+			num_predict: profile.maxOutputTokens ?? 8192,
+			...profile.extraBody.options,
+		};
+	}
+	return { url, headers, body };
+}
+
+async function callModel({ profile, system, user }) {
+	const { url, headers, body } = buildRequest({ profile, system, user });
+
+	// An explicit controller, not AbortSignal.timeout(). The convenience form leaves a live
+	// timer behind after the fetch resolves, and a process that then calls process.exit()
+	// while that handle is closing trips a libuv assertion on Windows
+	// (`!(handle->flags & UV_HANDLE_CLOSING)`, exit code 127) — observed 2026-07-27 on Node
+	// v26.5.0 immediately after a run that had otherwise passed every check. A CI gate whose
+	// exit code is decided by a race is worse than no gate.
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), profile.timeoutMs ?? 300000);
+	const signal = controller.signal;
 
 	try {
 		const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body), signal });
