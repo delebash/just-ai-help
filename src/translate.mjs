@@ -86,6 +86,13 @@ if (!checkOnly) {
 	];
 	if (apiKey) args.push("-k", apiKey);
 	if (profile.defaultHost) args.push("-h", cfg.host ?? profile.defaultHost);
+	// Ollama only, and deliberately WITHOUT a default. Measured 2026-07-27 on qwen3:8b:
+	// thinking off is 13x faster (27s -> 2s) but it TRANSLATED THE PLACEHOLDER —
+	// "{n} note | {n} notes" came back "{nota} nota | {nota} notas", where the thinking
+	// run got it right. So off is a speed/quality trade, not a free win; the caller
+	// chooses, and the output checks catch it either way.
+	const think = cfg.think ?? profile.think;
+	if (think !== undefined) args.push("--think", String(think));
 	if (profile.rateLimitMs) args.push("-r", String(profile.rateLimitMs));
 	if (profile.batchMaxTokens) args.push("--batch-max-tokens", String(profile.batchMaxTokens));
 	if (cfg.context) args.push("--context", cfg.context);

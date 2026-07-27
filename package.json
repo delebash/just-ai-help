@@ -11,7 +11,7 @@
     "translate": "node src/translate.mjs"
   },
   "dependencies": {
-    "i18n-ai-translate": "^5.1.0"
+    "i18n-ai-translate": "file:../i18n-ai-translate"
   },
   "engines": {
     "node": ">=20"
