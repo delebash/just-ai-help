@@ -64,16 +64,25 @@ export GEMINI_API_KEY=...            # free tier, no card: aistudio.google.com
 npm run translate
 ```
 
+> **The Gemini free tier is a smoke test, not an engine.** Measured 2026-07-27: **20
+> requests per day, per model** (quotaId `GenerateRequestsPerDayPerProjectPerModel-FreeTier`).
+> A 846-key catalogue at batch 24 is 36 requests, so a single language exceeds a whole day's
+> quota. Use it to prove your config works end to end, then run locally or on a paid tier.
+
 ### Running it locally instead
 
 **Use Ollama.** One install, and it handles the model download and the GPU for you:
 
 ```bash
 ollama serve
-ollama pull gemma3:12b
+ollama pull <model>
 ```
 
-then set `"engine": "ollama"` and `"model": "gemma3:12b"`. No API key.
+then set `"engine": "ollama"` and `"model": "<model>"`. No API key.
+
+**No model is recommended here yet.** An earlier version of this file named one that had
+never been run; the recommendation is written by measurement (see *Measured* below), not by
+picking a plausible size.
 
 This uses the **native** Ollama engine rather than Ollama's OpenAI-compatible `/v1`, because
 compat layers are consistently less complete than native APIs — Google's returns bodyless
