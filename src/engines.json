@@ -1,0 +1,33 @@
+{
+  "_why": "Per-provider facts a generic translator cannot know. Each of these three fields caused a real failure on 2026-07-27: a stale model id 404'd 19/40 keys, a thinking model with no token headroom returned empty content, and OpenAI's 120ms default rate-limit was applied to a provider with a ~15 RPM tier. Add a provider by adding a row.",
+
+  "gemini-free": {
+    "engine": "gemini",
+    "model": "gemini-3.6-flash",
+    "apiKeyEnv": "GEMINI_API_KEY",
+    "batchSize": 24,
+    "rateLimitMs": 1000,
+    "batchMaxTokens": 16000,
+    "_note": "Native engine, NOT the OpenAI-compat endpoint: generativelanguage.../v1beta/openai/ returns bodyless 400s for this tool's zod-generated response_format. Free tier needs no card."
+  },
+
+  "local-llamacpp": {
+    "engine": "chatgpt",
+    "model": "REQUIRED — the model id your llama-server serves",
+    "baseUrlEnv": "OPENAI_BASE_URL",
+    "apiKeyEnv": "OPENAI_API_KEY",
+    "batchSize": 8,
+    "rateLimitMs": 0,
+    "batchMaxTokens": 16000,
+    "_note": "Start llama-server with --reasoning off (or --reasoning-budget 0). A thinking model returns EMPTY content here: the deliberation fills message.reasoning_content and the token budget runs out before any answer is written. Any OpenAI-compatible server works — llama.cpp, Ollama, LM Studio."
+  },
+
+  "openai": {
+    "engine": "chatgpt",
+    "model": "gpt-5.2",
+    "apiKeyEnv": "OPENAI_API_KEY",
+    "batchSize": 32,
+    "rateLimitMs": 120,
+    "_note": "Untested here — no key. Rate limit is the package's own default for tier-1."
+  }
+}

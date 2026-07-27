@@ -1,0 +1,19 @@
+{
+  "name": "just-ai-help",
+  "version": "0.1.0",
+  "description": "Help-docs and translation tooling for any app that keeps its strings in standard i18n JSON. Translates a locale folder with an AI engine (local or online), and authors the help/hints system from the same source.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "bin": {
+    "just-ai-help": "./src/translate.mjs"
+  },
+  "scripts": {
+    "translate": "node src/translate.mjs"
+  },
+  "dependencies": {
+    "i18n-ai-translate": "^5.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

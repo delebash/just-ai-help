@@ -1,0 +1,15 @@
+{
+  "localesDir": "src/i18n/locales",
+  "sourceLanguage": "en",
+  "targets": ["es"],
+
+  "placeholder": { "prefix": "{", "suffix": "}" },
+  "pluralSeparator": "|",
+
+  "context": "a desktop app for managing recipes",
+  "glossary": {
+    "doNotTranslate": ["Acme", "Smart Pantry"]
+  },
+
+  "engine": "gemini-free"
+}
