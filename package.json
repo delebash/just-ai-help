@@ -8,10 +8,9 @@
     "just-ai-help": "./src/translate.mjs"
   },
   "scripts": {
-    "translate": "node src/translate.mjs"
-  },
-  "dependencies": {
-    "i18n-ai-translate": "file:../i18n-ai-translate"
+    "translate": "node src/translate.mjs",
+    "review": "node src/review.mjs",
+    "test": "node --test test/"
   },
   "engines": {
     "node": ">=20"

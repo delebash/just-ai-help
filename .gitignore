@@ -1,4 +1,4 @@
 node_modules/
 just-ai-help.config.json
-.i18n-ai-translate-cache.json
+.jah-cache.json
 *.log

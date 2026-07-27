@@ -1,33 +1,33 @@
 #!/usr/bin/env node
-// i18n auto-translate — a thin runner over `i18n-ai-translate`.
+// just-ai-help — translate a standard i18n JSON locale folder, then CHECK what was written.
 //
-// Works on ANY app that keeps its strings in standard i18n JSON files. Nothing here
-// knows about a framework: the placeholder syntax and the plural separator are config,
-// so vue-i18n (`{n}` + `a | b`), i18next (`{{n}}`, no pipes — set pluralSeparator null)
-// and anything else are all just settings.
+// Works on ANY app that keeps its strings in standard i18n JSON. Nothing here knows about a
+// framework: the placeholder syntax and the plural separator are config, so vue-i18n
+// (`{n}` + `a | b`), i18next (`{{n}}`, no pipes — set pluralSeparator null) and anything
+// else are all just settings.
 //
-// The dependency does the translating. This file exists for the two things it can't do:
+// Three layers:
+//   1. TRANSLATE — src/loop.mjs. Ours, since 2026-07-27. Owning the request body is the
+//      whole point; see that file's header for the measurements that decided it.
+//   2. VERIFY    — the checks below. The differentiator: no translator makes assertions
+//      about its own output. The one that matters most is a plural form whose halves came
+//      back IDENTICAL — it passes every structural test and is still wrong.
+//   3. REVIEW    — src/review.mjs, the local triage page.
 //
-//   1. ENGINE PROFILES (engines.json) — per-provider facts a generic translator cannot
-//      hold. All three fields come from real failures, not theory.
-//   2. POST-CHECKS — assertions on the OUTPUT that no translator makes about itself.
-//      The one that matters: a plural form whose halves came back identical passes every
-//      other check (right separator, right placeholders, right word count) and is still
-//      wrong. Observed: "Delete {n} autosave? | Delete {n} autosaves?" translated to
-//      "¿Eliminar {n} autoguardados? | ¿Eliminar {n} autoguardados?".
+// Usage:  node src/translate.mjs [config.json] [--check-only] [--force]
 
-import { execFileSync } from "node:child_process";
-import { readFileSync, existsSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { flatten, rebuild, translateLanguage } from "./loop.mjs";
 
+const argv = process.argv.slice(2);
 // --check-only re-runs the output checks over the locale files already on disk, without
 // calling any engine. That is what belongs in CI (free, offline, deterministic), and it is
 // also how the checks themselves get tested — corrupt a locale file, confirm it fails.
-const argv = process.argv.slice(2);
 const checkOnly = argv.includes("--check-only");
+const force = argv.includes("--force");
 const configPath = argv.find((a) => !a.startsWith("--")) || "just-ai-help.config.json";
+
 if (!existsSync(configPath)) {
 	console.error(`No config at ${configPath}`);
 	process.exit(1);
@@ -35,91 +35,84 @@ if (!existsSync(configPath)) {
 const cfg = JSON.parse(readFileSync(configPath, "utf8"));
 const engines = JSON.parse(readFileSync(new URL("./engines.json", import.meta.url), "utf8"));
 
-const profile = checkOnly ? {} : engines[cfg.engine];
-if (!profile) {
-	console.error(`Unknown engine "${cfg.engine}". Known: ${Object.keys(engines).filter((k) => !k.startsWith("_")).join(", ")}`);
-	process.exit(1);
-}
-
 const localesDir = resolve(cfg.localesDir);
 const sourceFile = join(localesDir, `${cfg.sourceLanguage}.json`);
+const sourceRaw = JSON.parse(readFileSync(sourceFile, "utf8"));
+const src = flatten(sourceRaw);
 
 if (!checkOnly) {
-	// The model comes from the profile, EXCEPT for a local server — there the model id is
-	// whatever your own llama-server/Ollama serves, so the config has to be able to say.
-	const model = cfg.model ?? profile.model;
-	if (!model || model.startsWith("REQUIRED")) {
-		console.error(`Engine "${cfg.engine}" needs a model id — set "model" in your config.`);
+	const base = engines[cfg.engine];
+	if (!base) {
+		const known = Object.keys(engines).filter((k) => !k.startsWith("_")).join(", ");
+		console.error(`Unknown engine "${cfg.engine}". Known: ${known}`);
 		process.exit(1);
 	}
 
-	// Ollama takes no key — a profile without `apiKeyEnv` simply doesn't need one.
-	const apiKey = profile.apiKeyEnv ? process.env[profile.apiKeyEnv] : "";
-	if (profile.apiKeyEnv && !apiKey) {
+	// The config may override anything on the profile — the model id above all, because a
+	// local server's model id is whatever YOU serve and the profile cannot know it.
+	const profile = { ...base, ...(cfg.profile ?? {}) };
+	if (cfg.model) profile.model = cfg.model;
+	if (cfg.url) profile.url = cfg.url;
+	if (cfg.think !== undefined) profile.think = cfg.think;
+
+	if (!profile.model || profile.model.startsWith("REQUIRED")) {
+		console.error(`Engine "${cfg.engine}" needs a model id — set "model" in your config.`);
+		process.exit(1);
+	}
+	if (profile.apiKeyEnv && !process.env[profile.apiKeyEnv]) {
 		console.error(`Set ${profile.apiKeyEnv} — the engine "${cfg.engine}" needs it.`);
 		process.exit(1);
 	}
 
-	// The glossary goes to the dependency as its own file; keep it out of the repo's config.
-	const work = mkdtempSync(join(tmpdir(), "i18n-tr-"));
-	const glossaryPath = join(work, "glossary.json");
-	writeFileSync(glossaryPath, JSON.stringify(cfg.glossary ?? {}, null, 2));
+	// Conventions the target language requires regardless of what the source did. Shipped
+	// for Spanish only, on purpose: inventing another language's rules from memory is how
+	// a confident wrong rule gets into every future translation.
+	const conventions = JSON.parse(readFileSync(new URL("./conventions.json", import.meta.url), "utf8"));
 
-	// Run the dependency's own entry with `node` — NOT via npx or a shell. On Windows a
-	// shelled-out command does not quote its arguments, so any multi-word value (the
-	// `--context` string, a path with spaces) arrives as several separate arguments; and
-	// npx would resolve the package against the CALLER's project rather than ours.
-	const cli = fileURLToPath(new URL("../node_modules/i18n-ai-translate/build/i18n-ai-translate.js", import.meta.url));
+	console.log(`Translating ${cfg.sourceLanguage} -> ${cfg.targets.join(", ")} via ${cfg.engine} (${profile.model})`);
+	const started = Date.now();
+	let hardFailures = 0;
 
-	const args = [
-		cli, "translate",
-		"-i", sourceFile,
-		"-o", ...cfg.targets,
-		"-e", profile.engine,
-		"-m", model,
-		"-p", cfg.placeholder.prefix,
-		"-s", cfg.placeholder.suffix,
-		"--prompt-mode", "json",
-		"-n", String(profile.batchSize),
-		"--glossary", glossaryPath,
-		"--cache",
-	];
-	if (apiKey) args.push("-k", apiKey);
-	if (profile.defaultHost) args.push("-h", cfg.host ?? profile.defaultHost);
-	// Ollama only, and deliberately WITHOUT a default. Measured 2026-07-27 on qwen3:8b:
-	// thinking off is 13x faster (27s -> 2s) but it TRANSLATED THE PLACEHOLDER —
-	// "{n} note | {n} notes" came back "{nota} nota | {nota} notas", where the thinking
-	// run got it right. So off is a speed/quality trade, not a free win; the caller
-	// chooses, and the output checks catch it either way.
-	const think = cfg.think ?? profile.think;
-	if (think !== undefined) args.push("--think", String(think));
-	if (profile.rateLimitMs) args.push("-r", String(profile.rateLimitMs));
-	if (profile.batchMaxTokens) args.push("--batch-max-tokens", String(profile.batchMaxTokens));
-	if (cfg.context) args.push("--context", cfg.context);
+	for (const lang of cfg.targets) {
+		const outPath = join(localesDir, `${lang}.json`);
+		const existing = existsSync(outPath) ? flatten(JSON.parse(readFileSync(outPath, "utf8"))) : {};
+		const conv = conventions[lang];
 
-	const env = { ...process.env };
-	if (profile.baseUrlEnv && process.env[profile.baseUrlEnv]) env[profile.baseUrlEnv] = process.env[profile.baseUrlEnv];
+		const { values, failed, requests } = await translateLanguage({
+			sourceFlat: src,
+			existingFlat: existing,
+			lang,
+			profile,
+			cfg: { ...cfg, conventionsLine: conv?.promptLine ?? "" },
+			cachePath: resolve(".jah-cache.json"),
+			force,
+		});
 
-	console.log(`Translating ${cfg.sourceLanguage} -> ${cfg.targets.join(", ")} via ${cfg.engine} (${model})`);
-	execFileSync(process.execPath, args, { stdio: "inherit", env });
+		writeFileSync(outPath, `${JSON.stringify(rebuild(sourceRaw, values), null, 2)}\n`);
+		console.log(`${lang}: wrote ${Object.keys(values).length} keys in ${requests} request(s)`);
+		if (failed.length) {
+			// Left untranslated and said so. Never silently skipped, and the exit code below
+			// is non-zero — a broken run and a good run must not look the same to CI.
+			hardFailures += failed.length;
+			console.error(`${lang}: ${failed.length} key(s) exhausted every retry: ${failed.slice(0, 8).join(", ")}${failed.length > 8 ? " …" : ""}`);
+		}
+	}
+	console.log(`Elapsed ${((Date.now() - started) / 1000).toFixed(1)}s`);
+	if (hardFailures) process.exitCode = 1;
 }
 
-// ── post-checks — the dependency exits 0 even when it skipped keys, so verify the FILES.
-const flatten = (o, p = "", out = {}) => {
-	for (const k in o) {
-		const v = o[k], np = p ? `${p}.${k}` : k;
-		if (v && typeof v === "object") flatten(v, np, out);
-		else out[np] = String(v);
-	}
-	return out;
-};
-const placeholders = (s) => (s.match(new RegExp(`\\${cfg.placeholder.prefix}\\w+\\${cfg.placeholder.suffix}`, "g")) || []).sort().join(",");
+// ── post-checks — verify the FILES that were written, not the run that wrote them ──────
+const placeholders = (s) =>
+	(s.match(new RegExp(`\\${cfg.placeholder.prefix}\\w+\\${cfg.placeholder.suffix}`, "g")) || []).sort().join(",");
 
-const src = flatten(JSON.parse(readFileSync(sourceFile, "utf8")));
 let failed = 0;
 for (const lang of cfg.targets) {
 	const outPath = join(localesDir, `${lang}.json`);
-	if (!existsSync(outPath)) { console.error(`FAIL ${lang}: no output file`); failed++; continue; }
+	if (!existsSync(outPath)) {
+		console.error(`FAIL ${lang}: no output file`);
+		failed++;
+		continue;
+	}
 	const dst = flatten(JSON.parse(readFileSync(outPath, "utf8")));
 
 	const missing = Object.keys(src).filter((k) => !dst[k]);
@@ -134,8 +127,9 @@ for (const lang of cfg.targets) {
 		return new Set(halves).size !== halves.length;
 	});
 
-	const notKept = (cfg.glossary?.doNotTranslate ?? [])
-		.flatMap((term) => Object.keys(src).filter((k) => src[k].includes(term) && dst[k] && !dst[k].includes(term)));
+	const notKept = (cfg.glossary?.doNotTranslate ?? []).flatMap((term) =>
+		Object.keys(src).filter((k) => src[k].includes(term) && dst[k] && !dst[k].includes(term)),
+	);
 
 	const report = [
 		["missing", missing],
@@ -152,4 +146,7 @@ for (const lang of cfg.targets) {
 	}
 	if (!report.some(([, k]) => k.length)) console.log("  all checks passed");
 }
-process.exit(failed ? 1 : 0);
+// Set the code, don't call process.exit(). Exiting hard while an I/O handle is still
+// closing is what tripped a libuv assertion here on 2026-07-27, turning a clean pass into
+// exit 127. Letting the loop drain reports the truth.
+if (failed) process.exitCode = 1;

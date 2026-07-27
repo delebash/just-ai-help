@@ -16,10 +16,27 @@ Two functions, one pipeline:
 They share one repo because they share the pipe: function 2 emits keys, function 1 translates
 them.
 
-> The translating itself is done by [`i18n-ai-translate`](https://github.com/taahamahdi/i18n-ai-translate),
-> which does the hard middle well — batching, swapping interpolations out before the model sees
-> them, injecting the glossary, and re-querying to verify its own output. If all you need is
-> translation, **use that directly**; this wrapper only adds the two things below.
+> **Zero dependencies.** Node 20+, global `fetch`, nothing from npm. It used to wrap
+> [`i18n-ai-translate`](https://github.com/taahamahdi/i18n-ai-translate) and that wrapper is
+> gone — see *Why the loop is ours* below.
+
+## Why the loop is ours
+
+Every quality failure measured on 2026-07-27 had one cause: **the request body belonged to
+somebody else and we could not reach it.** A thinking flag we could not send, a
+`chat_template_kwargs` we could not set, a stale model id baked into a constant, a rate limit
+tuned for a different provider — one disease, four symptoms. So the request body is now a
+literal object in `src/loop.mjs`, and every provider quirk is a field in a profile
+(`extraBody` merges into the body verbatim).
+
+The one adoption candidate that got a fair, timeboxed spike — `lingo.dev`, Apache-2.0, 5.4k
+stars, BYO-Ollama — passed three of four criteria and failed the one that counts. It posts the
+payload as raw JSON with **no placeholder shielding at all**, so on the 40-key corpus the model
+rewrote `{n} notes` as `{3} notas` and translated a do-not-translate brand name, both against a
+system prompt that forbade them by name. Shielding is not something you ask a model for. It is
+a substitution: interpolations *and* glossary terms are swapped for `⟦0⟧`, `⟦1⟧` … before the
+model sees them and restored by index afterwards, and an item whose tokens do not all come back
+exactly once is a failure that gets retried, not a result.
 
 ## What this adds
 
@@ -30,17 +47,19 @@ real failure, not from documentation:
 
 | field | the failure it prevents |
 |---|---|
-| `model` | a stale model id 404s. `gemini-2.5-flash` — the id in the dependency's own defaults — is no longer served to new keys, and 19 of 40 keys silently failed |
-| `batchMaxTokens` | a **thinking** model returns EMPTY content: deliberation fills `reasoning_content` and the budget is gone before any answer is written |
-| `rateLimitMs` | the `chatgpt` engine assumes OpenAI's ~500 RPM. Point it at a provider with a 15 RPM free tier and it burns the whole run on retries |
-| `engine` | Google's OpenAI-compatible endpoint returns **bodyless 400s** for this tool's generated `response_format`. Its native API accepts the same work. Compat layers are not equally complete |
+| `model` | a stale model id 404s. `gemini-2.5-flash` — a translator's own baked-in default — is no longer served to new keys, and 19 of 40 keys silently failed |
+| `maxOutputTokens` | a **thinking** model returns EMPTY content: deliberation fills `reasoning_content` and the budget is gone before any answer is written |
+| `rateLimitMs` | assume OpenAI's ~500 RPM, point it at a provider with a 15 RPM free tier, and it burns the whole run on retries |
+| `extraBody` | the general escape hatch. Any knob any server ever grows is config, not a code change |
+| `think` | Ollama's top-level thinking switch. Deliberately has no default — off is 13× faster and measurably worse on placeholders |
 
 Add a provider by adding a row.
 
 ### 2. Output checks
 
-The dependency **exits 0 even when it skipped keys** — a broken run and a good run look
-identical to CI. So the runner re-reads the files that were written and asserts:
+A translator that **exits 0 even when it skipped keys** makes a broken run and a good run look
+identical to CI — the behaviour that started this project. So the tool re-reads the files that
+were written and asserts:
 
 - nothing missing
 - placeholders unchanged (`{n}`, `{into}`, named slots)
@@ -103,10 +122,10 @@ implementation), to save you one Ollama install.
 
 The output is plain JSON in git. Edit it.
 
-Corrections survive re-runs, as long as later runs use the dependency's `diff` mode — give it
-the source file before and after your English edits and it translates **only changed keys**,
-reading your existing target file first. Add `--dry-run` to get a unified `.patch` of what
-*would* change before anything lands.
+**Corrections survive re-runs.** A key is re-translated only when its target is missing or
+when something that could change the answer changed — the source text, the language, the
+context sentence or the glossary, hashed together into `.jah-cache.json`. Edit a target value
+by hand and later runs leave it alone. `--force` overrides the whole delta.
 
 ## Measured
 

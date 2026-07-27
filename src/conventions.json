@@ -1,0 +1,15 @@
+{
+  "_why": "Per-language typographic conventions the TARGET requires regardless of what the source did. English has no opening question mark, so a translator that mirrors the source's punctuation is wrong in Spanish and nothing structural notices: the placeholders are intact, the pipes are intact, the words are right. Measured 2026-07-27: qwen3:8b missed the opening ¿ on 5 of 5 questions, and lingo.dev's run missed 5 of 5 too. Two uses, one table — `promptLine` tells the model, `pairedPunct` checks whether it listened.",
+
+  "_shipped": "SPANISH ONLY, deliberately. Other languages have their own rules (French's spaced punctuation, German's quotation marks, CJK full-width forms) and writing them from memory is exactly how a confident wrong rule ends up applied to every future translation. A language is added when someone who knows it says what the rule is.",
+
+  "_schema": {
+    "pairedPunct": "[[opener, closer], …]. A sentence in the target ending in `closer` must contain `opener`. Checked by the endpunc/startpunc check.",
+    "promptLine": "one clause, spliced into the system prompt's rule list."
+  },
+
+  "es": {
+    "pairedPunct": [["¿", "?"], ["¡", "!"]],
+    "promptLine": "Spanish punctuation is paired — a question must OPEN with ¿ and close with ?, and an exclamation must OPEN with ¡ and close with !, including when the sentence begins mid-string"
+  }
+}
