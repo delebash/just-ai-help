@@ -64,13 +64,31 @@ export GEMINI_API_KEY=...            # free tier, no card: aistudio.google.com
 npm run translate
 ```
 
-For a local model instead, set `"engine": "local-llamacpp"`, point `OPENAI_BASE_URL` at any
-OpenAI-compatible server (llama.cpp, Ollama, LM Studio) and set the model id it serves.
+### Running it locally instead
 
-> **Start a local llama.cpp server with `--reasoning off`.** A thinking model returns empty
-> content otherwise. This tool does not download or manage an engine — that is a separate
-> problem (~1,000 lines of CUDA-build selection and platform unpacking) and deliberately out of
-> scope.
+**Use Ollama.** One install, and it handles the model download and the GPU for you:
+
+```bash
+ollama serve
+ollama pull gemma3:12b
+```
+
+then set `"engine": "ollama"` and `"model": "gemma3:12b"`. No API key.
+
+This uses the **native** Ollama engine rather than Ollama's OpenAI-compatible `/v1`, because
+compat layers are consistently less complete than native APIs — Google's returns bodyless
+400s for a request its own native API accepts.
+
+If you already run something else, `"engine": "local-openai-compatible"` points at any
+OpenAI-compatible server via `OPENAI_BASE_URL`.
+
+> **A raw llama.cpp server must be started with `--reasoning off`.** A thinking model returns
+> empty content otherwise — the deliberation fills `reasoning_content` and the token budget is
+> gone before any answer is written. Ollama users don't hit this.
+
+**This tool does not download or manage an engine, deliberately.** That job is ~1,000 lines of
+CUDA-build-by-compute-capability selection and platform unpacking (measured in a working
+implementation), to save you one Ollama install.
 
 ## Fixing what it gets wrong
 

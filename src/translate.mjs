@@ -53,8 +53,9 @@ if (!checkOnly) {
 		process.exit(1);
 	}
 
-	const apiKey = process.env[profile.apiKeyEnv];
-	if (!apiKey) {
+	// Ollama takes no key — a profile without `apiKeyEnv` simply doesn't need one.
+	const apiKey = profile.apiKeyEnv ? process.env[profile.apiKeyEnv] : "";
+	if (profile.apiKeyEnv && !apiKey) {
 		console.error(`Set ${profile.apiKeyEnv} — the engine "${cfg.engine}" needs it.`);
 		process.exit(1);
 	}
@@ -76,7 +77,6 @@ if (!checkOnly) {
 		"-o", ...cfg.targets,
 		"-e", profile.engine,
 		"-m", model,
-		"-k", apiKey,
 		"-p", cfg.placeholder.prefix,
 		"-s", cfg.placeholder.suffix,
 		"--prompt-mode", "json",
@@ -84,6 +84,8 @@ if (!checkOnly) {
 		"--glossary", glossaryPath,
 		"--cache",
 	];
+	if (apiKey) args.push("-k", apiKey);
+	if (profile.defaultHost) args.push("-h", cfg.host ?? profile.defaultHost);
 	if (profile.rateLimitMs) args.push("-r", String(profile.rateLimitMs));
 	if (profile.batchMaxTokens) args.push("--batch-max-tokens", String(profile.batchMaxTokens));
 	if (cfg.context) args.push("--context", cfg.context);

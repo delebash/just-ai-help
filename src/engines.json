@@ -11,7 +11,17 @@
     "_note": "Native engine, NOT the OpenAI-compat endpoint: generativelanguage.../v1beta/openai/ returns bodyless 400s for this tool's zod-generated response_format. Free tier needs no card."
   },
 
-  "local-llamacpp": {
+  "ollama": {
+    "engine": "ollama",
+    "model": "REQUIRED — whatever `ollama list` shows, e.g. gemma3:12b",
+    "defaultHost": "http://127.0.0.1:11434",
+    "batchSize": 16,
+    "batchMaxTokens": 8192,
+    "_note": "THE recommended local option: one install, `ollama pull <model>`, done. Uses the tool's NATIVE ollama engine, not Ollama's OpenAI-compatible /v1 — compat layers are less complete than native APIs (Google's returns bodyless 400s for a request its native API accepts). batchMaxTokens is raised from the tool's own Ollama default of 2048 (cli_helpers.ts:147), which starves a thinking model: deliberation eats the budget and the answer is never written. No API key needed.",
+    "_setup": "ollama serve   then:   ollama pull <model>"
+  },
+
+  "local-openai-compatible": {
     "engine": "chatgpt",
     "model": "REQUIRED — the model id your llama-server serves",
     "baseUrlEnv": "OPENAI_BASE_URL",
