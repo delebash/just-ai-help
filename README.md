@@ -32,9 +32,9 @@ them.
 node src/translate.mjs config.json                    # translate what changed, then check
 node src/translate.mjs config.json --check-only       # check the files on disk. No engine. CI.
 node src/translate.mjs config.json --force            # re-translate everything
-node src/translate.mjs config.json --escalate <prof> # re-run ONLY the flagged keys, elsewhere
-node src/review.mjs     config.json --lang es         # the review page
-npm test                                              # node --test, 23 tests, no deps
+node src/translate.mjs config.json --escalate <prof>   # re-run ONLY the flagged keys, elsewhere
+node src/review.mjs    config.json --lang es           # the review page
+npm test                                               # node --test, 36 tests, no deps
 ```
 
 ## Why the loop is ours

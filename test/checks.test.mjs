@@ -67,6 +67,17 @@ test("startpunc bites on the missing Spanish opening mark", () => {
 	assert.deepEqual(codes("Delete this chapter?", "¿Eliminar este capítulo?"), []);
 });
 
+test("spurious-interrogative bites when the model invents a question", () => {
+	// The real regression, measured on the full 846-key catalogue 2026-07-27: 72 ¿ against
+	// 16 real questions. These two are verbatim from that run.
+	assert.ok(codes("Try tutorial project", "¿Probar proyecto de tutorial?").includes("spurious-interrogative"));
+	assert.ok(codes("Statuses", "¿Estados?").includes("spurious-interrogative"));
+	assert.ok(codes("Careful", "¡Cuidado!").includes("spurious-interrogative"));
+	// A genuine question keeps its marks and stays silent — the cure must not undo startpunc.
+	assert.deepEqual(codes("Delete this chapter?", "¿Eliminar este capítulo?"), []);
+	assert.deepEqual(codes("Careful!", "¡Cuidado!"), []);
+});
+
 test("startpunc is silent for a language with no conventions row", () => {
 	// Shipping rules we do not know is worse than shipping none.
 	const frCtx = buildContext(cfg, conventions, "fr");

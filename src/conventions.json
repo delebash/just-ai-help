@@ -10,6 +10,8 @@
 
   "es": {
     "pairedPunct": [["¿", "?"], ["¡", "!"]],
-    "promptLine": "Spanish punctuation is paired — a question must OPEN with ¿ and close with ?, and an exclamation must OPEN with ¡ and close with !, including when the sentence begins mid-string"
-  }
+    "promptLine": "Spanish punctuation is paired: a sentence that IS a question must open with ¿ and close with ?, and one that IS an exclamation must open with ¡ and close with !. Apply this ONLY when the English is itself a question or exclamation — most UI strings are labels, titles, buttons or statements, and those stay declarative. Never turn a statement into a question"
+  },
+
+  "_promptline_history": "The first version of the es promptLine said a question 'must OPEN with ¿ … including when the sentence begins mid-string' and stopped there. Measured on the full 846-key catalogue 2026-07-27: it produced 72 ¿ against 16 real questions — 56 SPURIOUS, turning the button 'Try tutorial project' into '¿Probar proyecto de tutorial?' and the card title 'Statuses' into '¿Estados?'. Missed openings were 0/16, so the rule worked and then kept working where it should have stopped. The 40-key corpus never caught it: too few imperative labels. The lesson is in the wording now — a convention rule must say when NOT to apply, because a model told half a rule applies it everywhere."
 }
