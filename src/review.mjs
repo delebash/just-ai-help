@@ -18,6 +18,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildContext, checkOne, runChecks } from "./checks.mjs";
 import { flatten, rebuild } from "./jsonutil.mjs";
+import { rankSuspects } from "./suspects.mjs";
 
 const json = (res, code, body) => {
 	res.writeHead(code, { "content-type": "application/json; charset=utf-8" });
@@ -144,6 +145,11 @@ export function createReviewServer({ configPath, lang: langArg } = {}) {
 	const readSourceRaw = () => JSON.parse(readFileSync(sourceFile, "utf8"));
 	const readTargetFlat = () => (existsSync(targetFile) ? flatten(JSON.parse(readFileSync(targetFile, "utf8"))) : {});
 
+	// The --probe sidecar, when one exists: a second pass by the same engine. Where the two
+	// disagree the model was unsure, which is the only signal we have for defects no
+	// structural check can see (suspects.mjs). Absent file = the feature is simply off.
+	const probeFile = join(localesDir, `${lang}.probe.json`);
+
 	/**
 	 * Writes one key back. The nested structure is rebuilt from the SOURCE file's shape, so
 	 * key order and nesting are the source's rather than an artefact of edit order — the diff
@@ -153,6 +159,18 @@ export function createReviewServer({ configPath, lang: langArg } = {}) {
 		const values = readTargetFlat();
 		values[key] = value;
 		writeFileSync(targetFile, `${JSON.stringify(rebuild(readSourceRaw(), values), null, 2)}\n`);
+		// Retire the probe entry too. A human rewriting the string will almost always differ
+		// from the machine's second pass, so without this the row would be re-flagged as a
+		// suspect on every refresh FOREVER — the reviewer's own fix becoming the evidence
+		// against it. Same rule escalation follows: a suspect that has been ACTED on is
+		// resolved, not still suspicious.
+		if (existsSync(probeFile)) {
+			const probeFlat = flatten(JSON.parse(readFileSync(probeFile, "utf8")));
+			if (probeFlat[key] !== undefined) {
+				delete probeFlat[key];
+				writeFileSync(probeFile, `${JSON.stringify(rebuild(readSourceRaw(), probeFlat), null, 2)}\n`);
+			}
+		}
 	}
 
 	/** Everything the page renders: flagged rows first, each with its reasons. */
@@ -160,6 +178,18 @@ export function createReviewServer({ configPath, lang: langArg } = {}) {
 		const sourceFlat = flatten(readSourceRaw());
 		const targetFlat = readTargetFlat();
 		const findings = runChecks({ sourceFlat, targetFlat, ctx });
+		if (existsSync(probeFile)) {
+			// Re-read every call: the reviewer's edits change what disagrees, and a suspect
+			// they have already rewritten should stop being one.
+			findings.push(
+				...rankSuspects({
+					sourceFlat,
+					targetFlat,
+					probeFlat: flatten(JSON.parse(readFileSync(probeFile, "utf8"))),
+					topN: cfg.suspects?.topN ?? 20,
+				}),
+			);
+		}
 
 		const byKey = new Map();
 		for (const f of findings) {

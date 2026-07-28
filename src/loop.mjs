@@ -109,7 +109,11 @@ const RESPONSE_SCHEMA = {
 	additionalProperties: false,
 };
 
-const TEMPERATURE = 0.2;
+// Exported because --probe DEPENDS on it being non-zero: that pass re-translates the same
+// keys with the same engine and treats any difference as uncertainty, so at temperature 0
+// both passes would be identical and the feature would report "nothing disagreed" — an
+// all-clear that measured nothing. translate.mjs checks this rather than trusting it.
+export const TEMPERATURE = 0.2;
 
 // ── transport ────────────────────────────────────────────────────────────────────────
 // Two kinds, one function, and the body is right here where anyone can read it. Both

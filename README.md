@@ -32,9 +32,10 @@ them.
 node src/translate.mjs config.json                    # translate what changed, then check
 node src/translate.mjs config.json --check-only       # check the files on disk. No engine. CI.
 node src/translate.mjs config.json --force            # re-translate everything
+node src/translate.mjs config.json --probe             # translate twice, flag where they disagree
 node src/translate.mjs config.json --escalate <prof>   # re-run ONLY the flagged keys, elsewhere
 node src/review.mjs    config.json --lang es           # the review page
-npm test                                               # node --test, 36 tests, no deps
+npm test                                               # node --test, 45 tests, no deps
 ```
 
 ## Why the loop is ours
@@ -181,6 +182,73 @@ The output is plain JSON in git. Edit it.
 when something that could change the answer changed — the source text, the language, the
 context sentence or the glossary, hashed together into `.jah-cache.json`. Edit a target value
 by hand and later runs leave it alone. `--force` overrides the whole delta.
+
+### Find the errors the checks cannot see — `--probe`
+
+```bash
+node src/translate.mjs config.json --probe
+```
+
+Every check above is about **form**. A translation can satisfy all of them and still be
+wrong, and the two worst cases we have measured both did:
+
+```
+en   Delete {n} autosave? | Delete {n} autosaves?
+es   ¿Eliminar autosave {n}?          <- "delete autosave NUMBER 3", not "delete 3"
+```
+
+The placeholder is present exactly once, no number changed, both plural halves differ, the
+punctuation is correct. Nothing structural can object. The other was an invented noun in the
+middle of an otherwise fluent sentence.
+
+`--probe` translates the catalogue a **second time with the same engine** and flags the keys
+where the two passes disagree. The loop runs at temperature 0.2, so where the model is sure
+it repeats itself exactly and where it is guessing it wanders — self-consistency as an
+uncertainty measure. Measured over a 40-key corpus: **30 of 40 keys came back byte-identical**,
+and both invisible defects above ranked in the top three of the ones that moved. The known
+false positive — `· {n} tokens`, correctly left alone — sank to #18, because agreement is the
+signal.
+
+Two *different* models was tried and is **worse**: they word everything differently, so real
+defects drown in stylistic noise (`Contraer` vs `Colapsar` outranked the hallucination). Same
+model twice also needs no second model chosen, downloaded or configured.
+
+The findings use the same `{ key, code, detail }` shape as every check, with `code:
+"disagreement"` and the second pass's wording in the detail, so they appear in the report,
+on the review page, and in what `--escalate` re-translates — with no new concepts anywhere.
+The second opinion is kept in `<lang>.probe.json` beside the locale, so a later
+`--check-only` or review session uses it without re-running the engine.
+
+Ranking is **length-normalised**. Raw disagreement correlates with source length (r≈0.42
+measured), so a flat ranking spends the whole budget on long paragraphs while the nastiest
+defects hide in short strings — one real error was `End` rendered as the verb `Finalizar`,
+three characters of source. Keys are banded by length using the corpus's own distribution
+and the budget is spread across bands. Set the budget with `"suspects": { "topN": 20 }` in
+your config; `0` disables it.
+
+A suspect that has been **acted on** stops being one: escalating a key, or editing it on the
+review page, drops its probe entry. Otherwise a reviewer's own fix would become the evidence
+against it and the row would stay flagged forever.
+
+**Known limitation:** editing `<lang>.json` **by hand**, outside the review page, does not
+retire the probe entry — so that key keeps showing as a suspect, because your wording differs
+from the machine's second pass. Remedy: delete the key from `<lang>.probe.json`, or re-run
+`--probe`. (The tool cannot currently tell a human edit from a model one. It could — the
+cache records what the model actually produced, so a target differing from its cache entry
+has been touched by a person — but that couples the suspect list to the cache and has not
+been built.)
+
+The cost is honest: it doubles engine time on the runs you enable it for. That is why it is
+opt-in rather than default.
+
+**It refuses to run at temperature 0**, and reports its own hit rate. The whole method is
+sampling the engine twice, so at temperature 0 the two passes are identical *by construction*
+and the result would be a confident "nothing disagreed" that measured nothing. `--probe`
+therefore checks the sampling temperature before spending any engine time and exits with an
+explanation, and every run prints `N/M key(s) differed between the two passes` — with a
+warning if N is 0, because a broken instrument and a flawless catalogue produce the same
+silence, and this tool exists precisely because a run that silently did nothing once looked
+exactly like a run that worked.
 
 ### Escalate the flagged keys to a better engine
 
