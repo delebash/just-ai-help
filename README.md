@@ -8,10 +8,10 @@ Two functions, one pipeline:
 
 1. **Translate.** Point it at a locales folder. It translates `en.json` into your target
    languages with an AI engine — local or online — and then **checks the files it wrote**.
-2. **Author the help system.** (Not built yet.) Help docs carry `lede:` and `hints:` in their
-   front-matter; those are extracted into locale keys, so one authored sentence becomes the
-   help article, the surface lede and the field hint — and translates like any other key,
-   because by then it *is* one.
+2. **Author the help system.** Help docs carry `lede:` and `hints:` in their front-matter;
+   those are extracted into locale keys, so one authored sentence becomes the help article,
+   the surface lede and the field hint — and translates like any other key, because by then
+   it *is* one. See *Author once, in the docs* below.
 
 They share one repo because they share the pipe: function 2 emits keys, function 1 translates
 them.
@@ -24,8 +24,9 @@ them.
 
 | | file | what it is |
 |---|---|---|
+| 0. **Author** | `src/extract.mjs` | docs front-matter (`lede:` / `hints:`) → locale keys, so one sentence serves the article, the lede and the hint |
 | 1. **Translate** | `src/loop.mjs` | the batch loop — shielding, batching, retry, cache, two transports. Commodity, and ours anyway, for the reason below |
-| 2. **Verify** | `src/checks.mjs` | the checks. **The differentiator** — nothing else does content QA on what a translator wrote |
+| 2. **Verify** | `src/checks.mjs` + `src/suspects.mjs` | the checks (form) and `--probe` (meaning). **The differentiator** — nothing else does content QA on what a translator wrote |
 | 3. **Review** | `src/review.mjs` | triage: one local page, flagged rows first, edit, save, re-check |
 
 ```bash
@@ -34,8 +35,10 @@ node src/translate.mjs config.json --check-only       # check the files on disk.
 node src/translate.mjs config.json --force            # re-translate everything
 node src/translate.mjs config.json --probe             # translate twice, flag where they disagree
 node src/translate.mjs config.json --escalate <prof>   # re-run ONLY the flagged keys, elsewhere
+node src/extract.mjs   config.json                     # docs front-matter -> locale keys
+node src/extract.mjs   config.json --check             # CI: fail if those keys are stale
 node src/review.mjs    config.json --lang es           # the review page
-npm test                                               # node --test, 45 tests, no deps
+npm test                                               # node --test, 64 tests, no deps
 ```
 
 ## Why the loop is ours
@@ -273,6 +276,63 @@ es: 16 -> 1 finding(s), 11 -> 1 key(s)          83.6 s
 
 Ten keys changed; the eleventh came back identical and stayed flagged, which is the honest
 outcome rather than a hidden one.
+
+## Author once, in the docs — `extract`
+
+```bash
+node src/extract.mjs config.json            # write the generated keys into the source locale
+node src/extract.mjs config.json --check    # CI: fail if they are stale. Writes nothing.
+```
+
+The same sentence usually gets written three times: in the help article, as the surface's
+one-line lede, and as a field's inline hint. Three copies drift — and then each drifts into a
+*different translation*, so the Spanish hint describes something the Spanish help article no
+longer says.
+
+So the doc's front-matter is the single authoring home:
+
+```markdown
+---
+lede: Everything about your manuscript's characters, in one place.
+hints:
+  lifeStatus: Whether the character is alive at the story's end.
+  role: Main characters appear in the sidebar; the rest stay in the library.
+---
+
+# Characters
+```
+
+`extract` turns that into `lede.characters` and `hints.characters.lifeStatus` in your **source
+locale file** — the same file the translator reads. That composition is the entire point:
+
+```
+docs → extract → en.json → translate → es.json
+```
+
+A changed hint re-translates as an ordinary key delta. The translator never knows docs exist,
+and there is no second pipeline to keep in step.
+
+**It owns two prefixes and nothing else.** Every run clears `lede.*` and `hints.*` and
+rewrites them from the docs, so a hint deleted from a document disappears from the locale
+instead of lingering forever and being translated into nine languages for nobody. Every other
+key is untouched — a generator that can clobber hand-written copy is a generator nobody dares
+run. Both prefixes are configurable (`ledePrefix`, `hintsPrefix`), as is `docsDir`.
+
+**The file's own shape is preserved.** Nested locales get nested keys, flat locales (literal
+dotted keys) get flat ones — detected, not configured, because reshaping 800 hand-written keys
+to add two of its own is how a generator gets banned from a repo.
+
+**The front-matter parser refuses what it does not understand.** Tabs, lists, multi-line
+scalars, nesting deeper than one level and duplicate keys all throw, naming the file and line.
+The failure that matters is not a parser that errors — it is one that *succeeds* on something
+it misread and silently drops a sentence, which then never reaches a locale, never gets
+translated, and shows up as a blank hint with nothing anywhere reporting a problem.
+
+`--check` is the CI contract: it asserts the committed locale matches the docs. A stale
+generated key is exactly as broken as a missing one, and neither is visible by reading either
+file on its own.
+
+It runs at **build time**. Runtime stays plain vue-i18n — nothing parses markdown in the app.
 
 ## Measured
 
