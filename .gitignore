@@ -2,3 +2,4 @@ node_modules/
 just-ai-help.config.json
 .jah-cache.json
 *.log
+.evidence/
