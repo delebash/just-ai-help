@@ -80,9 +80,31 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
    terminal at the time and were not saved either, so re-running is the only route back.
    Requires a config too — the repo ships only `just-ai-help.config.example.json`, and whatever
    config drove the 846-key run was never committed.
-2. **The conversion sweep** — the real remaining work, and unaffected by the above. The census
-   (research doc R1) says ~1,719 JW strings are still hardcoded, plus 613 in the kit and 1,551
-   in JustVoice. The pipeline is solved; the conversion is not.
+2. **The conversion sweep** — the real remaining work, and unaffected by the above.
+
+   **MEASURED 2026-07-29, not cited: `npm run i18n:lint` in `justwrite-app` reports 1,430
+   warnings, 0 errors, across 69 of 81 renderer `.vue` files.** 813 `t()`/`$t()` call sites are
+   already converted. The research doc's ~1,719 was the right ballpark. Distribution is
+   long-tailed — worst are `AnalysisView` 81, `ImportView` 57, `HomeView` 56, `RichEditor` 55,
+   `RelationshipArcModal` 42; the tail runs down to single-warning files, so there is cheap
+   early progress available. The kit (613) and JustVoice (1,551) figures are still uncounted.
+
+   **Do not build census tooling — it exists.** `justwrite-app` already ships
+   `@intlify/eslint-plugin-vue-i18n`'s `no-raw-text` as `npm run i18n:lint`, and
+   `eslint.i18n.config.mjs` says it is deliberately `warn` "during the sweep" and **flips to
+   `error` once every view is converted**, becoming the real gate. That is the progress meter
+   and the finish line in one. There is also `i18n:report` (vue-i18n-extract, finds missing and
+   unused keys) and `i18n:pseudo`.
+
+   **The hard case is already solved, so copy it rather than inventing anything.** Prose split
+   around an interpolation must become ONE key with named placeholders, not fragments — see
+   `chapters.index.intro` in `en.json`, which does exactly this with `{chapters}`, `{edit}`,
+   `{listView}`. Naming convention is `<surface>.<view>.<thing>` plus a shared `common.*` for
+   verbs (`save`, `cancel`, `clearFilters`…) — reuse `common` before adding a key.
+
+   A caveat on the number: it counts raw-text *occurrences*, not final keys. Fragments merge, and
+   some hits are brand names or avatar initials ("JustWrite", "MH") that should never be
+   translated. Expect the key count to land below 1,430.
 3. **`--probe` at scale** — validated on the 40-key corpus, not yet on a full catalogue.
    **Blocked on the same re-run**, and note probe doubles it: two passes, so ~2 hours for 867
    keys, not 52 minutes.
