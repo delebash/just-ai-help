@@ -109,10 +109,12 @@ const RESPONSE_SCHEMA = {
 	additionalProperties: false,
 };
 
-// Exported because --probe DEPENDS on it being non-zero: that pass re-translates the same
-// keys with the same engine and treats any difference as uncertainty, so at temperature 0
-// both passes would be identical and the feature would report "nothing disagreed" — an
-// all-clear that measured nothing. translate.mjs checks this rather than trusting it.
+// Exported because --probe DEPENDS on the sampling temperature being non-zero: that pass
+// re-translates the same keys with the same engine and treats any difference as uncertainty,
+// so at temperature 0 both passes would be identical and the feature would report "nothing
+// disagreed" — an all-clear that measured nothing. translate.mjs guards on
+// effectiveTemperature(profile) rather than on this constant, because extraBody can override
+// what is actually sent.
 export const TEMPERATURE = 0.2;
 
 // ── transport ────────────────────────────────────────────────────────────────────────
@@ -186,6 +188,17 @@ export function buildRequest({ profile, system, user }) {
 		};
 	}
 	return { url, headers, body };
+}
+
+/**
+ * The temperature one call will ACTUALLY sample at, extraBody overrides included. Read from
+ * the built request body rather than re-derived from the merge rules — a second copy of the
+ * precedence logic would drift, and the --probe guard that reads this would then wave through
+ * exactly the meaningless all-clear it exists to refuse.
+ */
+export function effectiveTemperature(profile) {
+	const { body } = buildRequest({ profile, system: "", user: "" });
+	return profile.kind === "ollama" ? body.options.temperature : body.temperature;
 }
 
 async function callModel({ profile, system, user }) {

@@ -29,7 +29,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { buildContext, runChecks, summarise } from "./checks.mjs";
 import { flatten, rebuild } from "./jsonutil.mjs";
-import { TEMPERATURE, translateLanguage } from "./loop.mjs";
+import { effectiveTemperature, translateLanguage } from "./loop.mjs";
 import { rankSuspects, spread } from "./suspects.mjs";
 
 const argv = process.argv.slice(2);
@@ -39,23 +39,13 @@ const argv = process.argv.slice(2);
 const checkOnly = argv.includes("--check-only");
 const force = argv.includes("--force");
 // --probe runs the SAME engine over the SAME keys a second time and flags where the two
-// passes disagree. It doubles engine time, so it is opt-in; what it buys is the only
-// coverage we have of defects no structural check can see (suspects.mjs). The result is
-// kept in a sidecar `<lang>.probe.json`, so a later --check-only or review run can use it
-// without re-running the engine.
+// passes disagree. It is a FULL second pass over the whole catalogue — force-sampled, so on
+// an incremental run it costs more than the delta did — and therefore opt-in; what it buys
+// is the only coverage we have of defects no structural check can see (suspects.mjs). The
+// result is kept in a sidecar `<lang>.probe.json`, so a later --check-only or review run can
+// use it without re-running the engine. Its temperature guard lives after the profile is
+// resolved, because only the resolved profile knows the EFFECTIVE temperature.
 const probe = argv.includes("--probe");
-// Refuse rather than mislead. --probe measures the engine's uncertainty by sampling it
-// twice; at temperature 0 the two passes are the same text by construction, so it would
-// report "nothing disagreed" and mean nothing by it. Checked BEFORE any engine time is
-// spent, and it fails loudly instead of returning a clean-looking report.
-if (probe && TEMPERATURE === 0) {
-	console.error(
-		"--probe needs a non-zero sampling temperature: it compares two samples of the same" +
-			" engine, and at temperature 0 they are identical by construction, so the result would" +
-			" be a meaningless all-clear. Raise TEMPERATURE in src/loop.mjs or drop --probe.",
-	);
-	process.exit(1);
-}
 const escalateTo = argv.includes("--escalate") ? argv[argv.indexOf("--escalate") + 1] : null;
 const escalateIdx = escalateTo ? argv.indexOf("--escalate") + 1 : -1;
 const configPath = argv.find((a, i) => !a.startsWith("--") && i !== escalateIdx) || "just-ai-help.config.json";
@@ -225,6 +215,21 @@ if (escalateTo) {
 	console.log(`Elapsed ${((Date.now() - started) / 1000).toFixed(1)}s`);
 } else if (!checkOnly) {
 	const profile = resolveProfile(cfg.engine, { applyConfigOverrides: true });
+	// Refuse rather than mislead. --probe measures the engine's uncertainty by sampling it
+	// twice; at temperature 0 the two passes are the same text by construction, so it would
+	// report "nothing disagreed" and mean nothing by it. Guarded on the EFFECTIVE temperature
+	// — what the built request actually carries, extraBody overrides included — because a
+	// profile that pins temperature 0 via extraBody would defeat a check on the constant.
+	// Still before any engine time is spent.
+	if (probe && effectiveTemperature(profile) === 0) {
+		console.error(
+			"--probe needs a non-zero sampling temperature: it compares two samples of the same" +
+				" engine, and at temperature 0 they are identical by construction, so the result would" +
+				" be a meaningless all-clear. This profile's effective temperature is 0 — check its" +
+				" extraBody override, or drop --probe.",
+		);
+		process.exit(1);
+	}
 	console.log(`Translating ${cfg.sourceLanguage} -> ${cfg.targets.join(", ")} via ${cfg.engine} (${profile.model})`);
 	const started = Date.now();
 	for (const lang of cfg.targets) {
@@ -253,7 +258,7 @@ if (escalateTo) {
 			console.log(`${lang}: probe — ${moved}/${Object.keys(src).length} key(s) differed between the two passes`);
 			if (moved === 0) {
 				console.warn(
-					`${lang}: WARNING — the two passes agreed on EVERY key. At temperature ${TEMPERATURE} that is` +
+					`${lang}: WARNING — the two passes agreed on EVERY key. At temperature ${effectiveTemperature(profile)} that is` +
 						" implausible for a real catalogue; suspect the sampler, the cache or the engine rather than" +
 						" reading this as a clean bill of health.",
 				);

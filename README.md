@@ -38,7 +38,7 @@ node src/translate.mjs config.json --escalate <prof>   # re-run ONLY the flagged
 node src/extract.mjs   config.json                     # docs front-matter -> locale keys
 node src/extract.mjs   config.json --check             # CI: fail if those keys are stale
 node src/review.mjs    config.json --lang es           # the review page
-npm test                                               # node --test, 64 tests, no deps
+npm test                                               # node --test, 65 tests, no deps
 ```
 
 ## Why the loop is ours
@@ -241,14 +241,16 @@ cache records what the model actually produced, so a target differing from its c
 has been touched by a person — but that couples the suspect list to the cache and has not
 been built.)
 
-The cost is honest: it doubles engine time on the runs you enable it for. That is why it is
-opt-in rather than default.
+The cost is honest: the probe is a full second pass over the whole catalogue, regardless of
+how small the delta was — a full run costs double, an incremental run costs more than the
+delta itself. That is why it is opt-in rather than default.
 
-**It refuses to run at temperature 0**, and reports its own hit rate. The whole method is
-sampling the engine twice, so at temperature 0 the two passes are identical *by construction*
-and the result would be a confident "nothing disagreed" that measured nothing. `--probe`
-therefore checks the sampling temperature before spending any engine time and exits with an
-explanation, and every run prints `N/M key(s) differed between the two passes` — with a
+**It refuses to run at an effective temperature of 0**, and reports its own hit rate. The
+whole method is sampling the engine twice, so at temperature 0 the two passes are identical
+*by construction* and the result would be a confident "nothing disagreed" that measured
+nothing. `--probe` therefore checks the temperature the built request will actually carry —
+including an `extraBody` override in the engine profile — before spending any engine time
+and exits with an explanation, and every run prints `N/M key(s) differed between the two passes` — with a
 warning if N is 0, because a broken instrument and a flawless catalogue produce the same
 silence, and this tool exists precisely because a run that silently did nothing once looked
 exactly like a run that worked.

@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildRequest, buildSystemPrompt, cacheKey, restore, shield } from "../src/loop.mjs";
+import { TEMPERATURE, buildRequest, buildSystemPrompt, cacheKey, effectiveTemperature, restore, shield } from "../src/loop.mjs";
 import { placeholderRe } from "../src/jsonutil.mjs";
 
 const re = placeholderRe({ prefix: "{", suffix: "}" });
@@ -110,6 +110,15 @@ test("extraBody merges verbatim, but ollama `options` merges one level deep", ()
 	assert.equal(body.options.num_ctx, 16384);
 	assert.equal(body.options.temperature, 0.2, "clobbering `options` would silently drop this");
 	assert.equal(body.options.num_predict, 4096, "and this");
+});
+
+test("effectiveTemperature reads what the built body carries — the --probe guard depends on it", () => {
+	assert.equal(effectiveTemperature({ kind: "ollama", url: "u", model: "m" }), TEMPERATURE);
+	assert.equal(effectiveTemperature({ kind: "openai-compat", url: "u", model: "m" }), TEMPERATURE);
+	// An extraBody override to 0 must be SEEN — a guard on the constant alone would wave it
+	// through and --probe would report a meaningless all-clear.
+	assert.equal(effectiveTemperature({ kind: "ollama", url: "u", model: "m", extraBody: { options: { temperature: 0 } } }), 0);
+	assert.equal(effectiveTemperature({ kind: "openai-compat", url: "u", model: "m", extraBody: { temperature: 0 } }), 0);
 });
 
 test("the openai-compat body: url gets only the endpoint, key becomes a bearer header", () => {

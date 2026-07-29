@@ -8,7 +8,7 @@
     "model": "model id. A value starting \"REQUIRED\" means the config must supply it — a local server's model id is whatever YOU serve.",
     "apiKeyEnv": "optional. Name of the env var holding the key. Absent = no key needed. The key is never written to a file.",
     "headers": "optional. Extra request headers, merged verbatim.",
-    "extraBody": "optional. Merged into the JSON request body verbatim, last. The general pass-through. ONE exception: for kind \"ollama\", `extraBody.options` is merged one level deep into the built `options` rather than replacing it — otherwise setting num_ctx would silently drop temperature and the output cap.",
+    "extraBody": "optional. Merged into the JSON request body verbatim, last. The general pass-through. ONE exception: for kind \"ollama\", `extraBody.options` is merged one level deep into the built `options` rather than replacing it — otherwise setting num_ctx would silently drop temperature and the output cap. Temperature can be overridden here too; the --probe guard reads the EFFECTIVE temperature of the built request (loop.mjs effectiveTemperature), so an override to 0 is refused rather than silently measuring nothing.",
     "think": "optional. Ollama's top-level `think` field: false | true | \"low\" | \"medium\" | \"high\". Omitted when undefined, which leaves the model's own default alone. Deliberately has NO default — see the ollama row.",
     "batchSize": "how many keys go in one request.",
     "rateLimitMs": "optional. Minimum gap between requests. Omit or 0 for a local server.",
@@ -16,7 +16,6 @@
     "maxOutputTokens": "output-token cap for one request. Was `batchMaxTokens`; renamed because it is now ours and it caps output, not a batch."
   },
 
-  "_legacy": "The `engine` / `defaultHost` / `baseUrlEnv` / `batchMaxTokens` fields on each row are the OLD shape, read by src/translate.mjs while it still shells out to i18n-ai-translate. They go when the owned loop replaces it.",
 
   "gemini-free": {
     "kind": "openai-compat",
@@ -29,9 +28,7 @@
     "maxOutputTokens": 16000,
     "_note": "SMOKE-TEST ONLY: the free tier is 20 requests per day per model (measured 2026-07-27, quotaId GenerateRequestsPerDayPerProjectPerModel-FreeTier). It cannot translate a real catalogue — 846 keys at batch 24 is 36 requests, so ONE language exceeds a whole day's quota. Use it to prove a config works end to end, then switch engines. Quality when it does run is the best measured here: 40/40 keys, 40/40 placeholders, 8/8 pipes, 0 identical-half bugs, 94 s.",
     "_timeout_why": "94 s for the entire 40-key corpus, so 120 s per request is roughly 4x the worst single batch.",
-    "_compat_caveat": "The v1beta/openai endpoint returned bodyless 400s to i18n-ai-translate's zod-generated response_format. Owning the request body is exactly what makes that reachable — but it is UNVERIFIED against our own loop.",
-    "engine": "gemini",
-    "batchMaxTokens": 16000
+    "_compat_caveat": "The v1beta/openai endpoint returned bodyless 400s to i18n-ai-translate's zod-generated response_format. Owning the request body is exactly what makes that reachable — but it is UNVERIFIED against our own loop."
   },
 
   "ollama": {
@@ -46,10 +43,7 @@
 
     "_think_why": "`think` is deliberately absent, with no default either way. Measured 2026-07-27 on qwen3:8b: thinking off is 13x faster (27 s -> 2 s) but it TRANSLATED THE PLACEHOLDER, returning \"{nota} nota | {nota} notas\" where the thinking run returned \"{n} nota | {n} notas\". Off is a speed/quality trade on structured text, not a free win.",
     "_timeout_why": "the 40-key corpus at batch 16 is 3 requests and qwen3:8b took 205 s for the run, so ~68 s for the worst batch. 300 s is ~4x that, with headroom for a cold model load.",
-    "_setup": "ollama serve   then:   ollama pull <model>",
-    "engine": "ollama",
-    "defaultHost": "http://127.0.0.1:11434",
-    "batchMaxTokens": 8192
+    "_setup": "ollama serve   then:   ollama pull <model>"
   },
 
   "local-openai-compatible": {
@@ -61,10 +55,7 @@
     "timeoutMs": 300000,
     "maxOutputTokens": 16000,
     "_note": "Any OpenAI-compatible server — llama.cpp's llama-server, LM Studio, vLLM. Override `url` in your config to match yours. A raw llama-server must be started with --reasoning off (or --reasoning-budget 0), or given the equivalent via extraBody: a thinking model returns EMPTY content otherwise, because deliberation fills message.reasoning_content and the token budget runs out before any answer is written.",
-    "_timeout_why": "same reasoning as the ollama row — local generation, smaller batch.",
-    "engine": "chatgpt",
-    "baseUrlEnv": "OPENAI_BASE_URL",
-    "batchMaxTokens": 16000
+    "_timeout_why": "same reasoning as the ollama row — local generation, smaller batch."
   },
 
   "openai": {
@@ -76,8 +67,6 @@
     "rateLimitMs": 120,
     "timeoutMs": 120000,
     "maxOutputTokens": 16000,
-    "_note": "UNTESTED here — no key. rateLimitMs is OpenAI's published tier-1 figure, not a measurement of ours.",
-    "engine": "chatgpt",
-    "batchMaxTokens": 16000
+    "_note": "UNTESTED here — no key. rateLimitMs is OpenAI's published tier-1 figure, not a measurement of ours."
   }
 }

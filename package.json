@@ -11,7 +11,7 @@
     "translate": "node src/translate.mjs",
     "extract": "node src/extract.mjs",
     "review": "node src/review.mjs",
-    "test": "node --test \"test/**/*.test.mjs\""
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"

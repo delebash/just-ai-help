@@ -118,3 +118,28 @@ then competed with it for the GPU until both timed out. Use
 
 **Never let two runs share one GPU.** Unload/stop the first engine explicitly and verify VRAM
 is free (`GET /api/ps` for Ollama) before starting the second.
+
+## 2026-07-29 ADDENDUM — the design review and the fixes it produced
+
+A full design review of this repo ran on 2026-07-29 (every src module and config read, the
+suite run). Verdict: the architecture stands — owned loop, checks-as-spec, probe, one-file
+review page all confirmed on the merits, nothing structural changed. Five fixes landed, one
+commit. First, the `--probe` temperature guard had a hole: it read the `TEMPERATURE` constant,
+but a profile can pin `temperature: 0` through `extraBody` (which merges into the request body
+last), which would have silently produced exactly the meaningless all-clear the guard exists to
+refuse. The guard now reads `effectiveTemperature(profile)` in `src/loop.mjs`, which derives
+the value from the BUILT request body rather than from a second copy of the merge rules, so the
+two can never drift. Second, `npm test` is now plain `node --test` (default recursive
+discovery): the old quoted glob needs Node 21+ while the repo declares Node 20+, and the
+directory form (`node --test test/`) empirically fails on this machine (Node 26.5.0, win32) —
+argless discovery passes 65/65 and is documented Node 20 behavior. Third, `src/models.json` now
+records Hy-MT2-7B in the 8 GB tier as measured-ONCE (`hf.co/tencent/Hy-MT2-7B-GGUF`, verified
+first-party at huggingface.co/tencent/Hy-MT2-7B-GGUF) — the file's own rule demanded a row for
+a measured model, and the "second run settles the tier" item above stays open. Fourth, every
+8 GB wall time in models.json now carries the 2133 MT/s caveat from this document, since the
+numbers were measured on the misconfigured RAM. Fifth, `src/engines.json` lost its `_legacy`
+note (it claimed the tool still shells out to i18n-ai-translate — false since the owned loop)
+and the four dead fields it excused (`engine`/`defaultHost`/`baseUrlEnv`/`batchMaxTokens`),
+grep-verified to have zero consumers. README updated in the same change: the probe is a full
+second pass (not "doubles"), and the guard's description says "effective temperature". Suite
+after all of it: 65/65.

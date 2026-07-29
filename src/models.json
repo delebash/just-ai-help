@@ -9,7 +9,7 @@
 
   "tiers": {
     "8gb": {
-      "_measured_on": "RTX 2070 Super, 8 GB, Ollama, 2026-07-27",
+      "_measured_on": "RTX 2070 Super, 8 GB, Ollama, 2026-07-27. CAVEAT on every wall time: the machine's RAM was later found running at 2133 MT/s — the JEDEC fallback, XMP never enabled (docs/HANDOFF.md, 2026-07-28). Models too big for 8 GB stream offloaded layers through exactly that RAM, so absolute times should improve at the rated 3600 and gaps like translategemma's 5x may shrink. Flag counts are unaffected; re-measure before leaning on any time below.",
       "recommended": {
         "model": "gemma3:12b",
         "size_gb": 8.1,
@@ -18,6 +18,13 @@
         "why": "won a two-model bake-off scored mechanically. Both candidates were structurally perfect, so the winner is the one with fewer semantic flags — and the decisive one was the missing Spanish opening ¿, where qwen3:8b failed 1 and 5 times WITH the rule in its prompt. That is a model property, not a prompt problem."
       },
       "alternatives": [
+        {
+          "model": "hf.co/tencent/Hy-MT2-7B-GGUF",
+          "size_gb": 4.6,
+          "status": "measured",
+          "result": "0 structural failures; 2 semantic flags; 233 s — ONE corpus run (the winner has two)",
+          "why": "first-party Tencent GGUF from the translation-specialist Hy-MT2 family. Tied the winner's flag count in a single run at 57% of its disk size — but one run does not unseat a two-run winner, so a second run is the cheap way to settle this tier (queued in docs/HANDOFF.md)."
+        },
         {
           "model": "qwen3:8b",
           "size_gb": 5.2,
