@@ -48,6 +48,14 @@
           "result": "39/40 keys, translated the do-not-translate brand `Strands` to `Hilos`, lost a plural pipe",
           "why": "the specialised-model trap. Translation-tuned, and at 4B it lacks the instruction-following to honour a glossary — it faithfully translates the thing you told it not to. Its 12B sibling has no such problem, which is exactly why size-of-a-good-family is not evidence."
         }
+      ],
+      "candidates": [
+        {
+          "model": "gemma-4-26b-a4b-qat (local GGUF via llama-server)",
+          "size_gb": 13.3,
+          "status": "available",
+          "why": "the flagship MoE — 26B with ~4B active, so it runs on an 8 GB card by streaming offloaded layers, and under the OLD wrapper pipeline it was the FASTEST local model measured (147 s for the corpus) with one identical-halves plural bug, exactly the class shielding now prevents by construction. NOT `measured` because that word means 'ran the corpus through THIS tool', and its run here was staged 2026-07-28 but died at startup — Ollama still held another model, and two engines cannot share 8 GB. Re-run queued after the XMP fix (docs/HANDOFF.md, 'THE RUN THAT WAS INTERRUPTED'); if the old-pipeline speed holds, it contends for the recommendation."
+        }
       ]
     },
 
