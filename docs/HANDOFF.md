@@ -61,7 +61,7 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
 
 | repo | branch | state |
 |---|---|---|
-| `just-ai-help` | `main` | ahead of origin — published at github.com/delebash/just-ai-help |
+| `just-ai-help` | `main` | in sync with origin — published at github.com/delebash/just-ai-help |
 | `i18n-ai-translate` | `master` | ahead 1 (`0d7168a`, the `--think` work). `origin` is **taahamahdi's** — do NOT push. Needs the user's own fork before any PR, and the work is largely superseded now that we own the loop. |
 
 ## WHAT REMAINS
@@ -72,8 +72,23 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
    doc R1) says ~1,719 JW strings are still hardcoded, plus 613 in the kit and 1,551 in
    JustVoice. The pipeline is solved; the conversion is not.
 3. **`--probe` at scale** — validated on the 40-key corpus, not yet on the full 846.
-4. **LICENSE files** — `just-ai-help` has one (GPL-3.0). The other public repos still declare
-   GPL in metadata and ship none, which legally grants nobody anything. User's call.
+4. ~~**LICENSE files**~~ — **DONE 2026-07-29, and the whole family is now MIT.** Every repo
+   (`just-ai-help`, `just-llm-runner`, `justwrite-app`, `justwrite-website`, `claude-config`,
+   `JustVoice`) ships an MIT `LICENSE` with matching metadata. The user's decision was explicit:
+   no restrictions on anyone downstream, selling and closed forks both fine.
+
+   The only thing that had ever forced copyleft was **`pedalboard`** in JustVoice — GPL-3.0
+   because it statically links JUCE. It was replaced with first-party DSP
+   (`server/justvoice/audio/dsp/`, numpy + scipy) plus Signalsmith Stretch (MIT) for pitch
+   shifting, then JustVoice flipped GPL → MIT across 262 files. **JustVoice's flip is on branch
+   `claude/admiring-galileo-il3q0o`, not `main`, so GitHub still reports GPL-3.0 for it until
+   that merges.**
+
+   Two restrictions survive an MIT relicense and are the user's to decide on — both are about
+   model *weights*, not code: TADA's weights carry the **Llama 3.2 Community License**, which
+   obliges anyone shipping the app to display "Built with Llama" in UI and docs
+   (`JustVoice/docs/engines.md`), and `JustVoice/LICENSES.md` still lists **`qwen-tts`** as
+   `verify upstream | TBD`.
 
 ## USER-OWNED — never do these unasked
 
