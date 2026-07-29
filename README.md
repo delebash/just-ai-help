@@ -44,6 +44,9 @@ npm test                                               # node --test, 65 tests, 
 > **Just want to use it?** [`docs/GUIDE.md`](docs/GUIDE.md) is the short version — which model
 > to pull for your machine, the commands, the workflow, and when to use an online engine. This
 > README is the long version: why every piece works the way it does.
+>
+> **Picking up development?** [`docs/HANDOFF.md`](docs/HANDOFF.md) is the current state: the
+> measured results, what is open, and which record wins when two disagree.
 
 ## Why the loop is ours
 
