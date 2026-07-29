@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Layer 3 — the review page. Triage what Layer 2 flagged, fix it, re-check, move on.
 //
-//     node src/review.mjs config.json --lang es [--port 4780]
+//     node src/review.js config.json --lang es [--port 4780]
 //
 // One node:http server, one HTML page served inline, no framework, no build step, no
 // dependencies, no accounts and no database. The JSON files ARE the state — the same files
@@ -16,9 +16,9 @@ import { createServer } from "node:http";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { buildContext, checkOne, runChecks } from "./checks.mjs";
-import { flatten, rebuild } from "./jsonutil.mjs";
-import { rankSuspects } from "./suspects.mjs";
+import { buildContext, checkOne, runChecks } from "./checks.js";
+import { flatten, rebuild } from "./jsonutil.js";
+import { rankSuspects } from "./suspects.js";
 
 const json = (res, code, body) => {
 	res.writeHead(code, { "content-type": "application/json; charset=utf-8" });
@@ -147,7 +147,7 @@ export function createReviewServer({ configPath, lang: langArg } = {}) {
 
 	// The --probe sidecar, when one exists: a second pass by the same engine. Where the two
 	// disagree the model was unsure, which is the only signal we have for defects no
-	// structural check can see (suspects.mjs). Absent file = the feature is simply off.
+	// structural check can see (suspects.js). Absent file = the feature is simply off.
 	const probeFile = join(localesDir, `${lang}.probe.json`);
 
 	/**

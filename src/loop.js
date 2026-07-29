@@ -14,7 +14,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { escapeRe, placeholderRe } from "./jsonutil.mjs";
+import { escapeRe, placeholderRe } from "./jsonutil.js";
 
 // ── placeholder shielding ────────────────────────────────────────────────────────────
 // Interpolations are swapped for ⟦0⟧, ⟦1⟧ … before the model sees them and restored by
@@ -112,7 +112,7 @@ const RESPONSE_SCHEMA = {
 // Exported because --probe DEPENDS on the sampling temperature being non-zero: that pass
 // re-translates the same keys with the same engine and treats any difference as uncertainty,
 // so at temperature 0 both passes would be identical and the feature would report "nothing
-// disagreed" — an all-clear that measured nothing. translate.mjs guards on
+// disagreed" — an all-clear that measured nothing. translate.js guards on
 // effectiveTemperature(profile) rather than on this constant, because extraBody can override
 // what is actually sent.
 export const TEMPERATURE = 0.2;

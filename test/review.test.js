@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createReviewServer } from "../src/review.mjs";
+import { createReviewServer } from "../src/review.js";
 
 const EN = {
 	nav: { chapters: "Chapters", strands: "Strands" },

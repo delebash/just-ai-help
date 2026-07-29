@@ -9,7 +9,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseFrontMatter } from "../src/frontmatter.mjs";
+import { parseFrontMatter } from "../src/frontmatter.js";
 
 test("a doc with no front-matter is not an error — most docs have none yet", () => {
 	const { data, body } = parseFrontMatter("# Writing\n\nSome prose.\n");

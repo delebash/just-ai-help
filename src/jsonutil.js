@@ -1,5 +1,5 @@
-// Shared, because two copies drift. Layer 1 (loop.mjs), Layer 2 (checks.mjs) and Layer 3
-// (review.mjs) all need to walk a locale file the same way — if they disagree about what a
+// Shared, because two copies drift. Layer 1 (loop.js), Layer 2 (checks.js) and Layer 3
+// (review.js) all need to walk a locale file the same way — if they disagree about what a
 // key path is or what counts as a placeholder, the checks stop describing what the loop
 // wrote and the review page stops addressing the keys the checks named.
 

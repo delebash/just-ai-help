@@ -7,30 +7,30 @@
 // else are all just settings.
 //
 // Three layers:
-//   1. TRANSLATE — src/loop.mjs. Ours, since 2026-07-27. Owning the request body is the
+//   1. TRANSLATE — src/loop.js. Ours, since 2026-07-27. Owning the request body is the
 //      whole point; see that file's header for the measurements that decided it.
 //   2. VERIFY    — the checks below. The differentiator: no translator makes assertions
 //      about its own output. The one that matters most is a plural form whose halves came
 //      back IDENTICAL — it passes every structural test and is still wrong.
-//   3. REVIEW    — src/review.mjs, the local triage page.
+//   3. REVIEW    — src/review.js, the local triage page.
 //
 // Usage:
-//   node src/translate.mjs [config.json]                  translate what changed, then check
+//   node src/translate.js [config.json]                  translate what changed, then check
 //                          --force                        re-translate everything
 //                          --check-only                   check the files on disk, no engine
 //                          --probe                        translate a SECOND time with the same
 //                                                         engine and flag where the two passes
 //                                                         disagree — the suspects the checks
-//                                                         cannot see (see suspects.mjs)
+//                                                         cannot see (see suspects.js)
 //                          --escalate <profile>           re-translate ONLY the flagged keys
 //                                                         with a stronger engine profile
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { buildContext, runChecks, summarise } from "./checks.mjs";
-import { flatten, rebuild } from "./jsonutil.mjs";
-import { effectiveTemperature, translateLanguage } from "./loop.mjs";
-import { rankSuspects, spread } from "./suspects.mjs";
+import { buildContext, runChecks, summarise } from "./checks.js";
+import { flatten, rebuild } from "./jsonutil.js";
+import { effectiveTemperature, translateLanguage } from "./loop.js";
+import { rankSuspects, spread } from "./suspects.js";
 
 const argv = process.argv.slice(2);
 // --check-only re-runs the output checks over the locale files already on disk, without
@@ -41,7 +41,7 @@ const force = argv.includes("--force");
 // --probe runs the SAME engine over the SAME keys a second time and flags where the two
 // passes disagree. It is a FULL second pass over the whole catalogue — force-sampled, so on
 // an incremental run it costs more than the delta did — and therefore opt-in; what it buys
-// is the only coverage we have of defects no structural check can see (suspects.mjs). The
+// is the only coverage we have of defects no structural check can see (suspects.js). The
 // result is kept in a sidecar `<lang>.probe.json`, so a later --check-only or review run can
 // use it without re-running the engine. Its temperature guard lives after the profile is
 // resolved, because only the resolved profile knows the EFFECTIVE temperature.
@@ -103,7 +103,7 @@ let hardFailures = 0;
  *
  * `outPath`/`cachePath` are parameters rather than constants because the --probe pass runs
  * this same function into a SIDECAR file with its own cache. Sharing the main cache would
- * be silently destructive: the cache is loaded and written back on every run (loop.mjs:297,
+ * be silently destructive: the cache is loaded and written back on every run (loop.js:297,
  * :383) and --force overwrites entries (:303, :347), so a probe would replace the real
  * translation's cached values with its own and poison every later delta.
  */

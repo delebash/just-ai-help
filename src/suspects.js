@@ -1,6 +1,6 @@
 // Layer 2b — the SUSPECT list. What the checks CANNOT see.
 //
-// checks.mjs is pofilter's list, which is about FORM: placeholders, plurals, punctuation,
+// checks.js is pofilter's list, which is about FORM: placeholders, plurals, punctuation,
 // brackets. A translation can pass every one of them and still be wrong, and the two worst
 // cases measured on 2026-07-28 both did:
 //
@@ -16,7 +16,7 @@
 // language nobody on the team reads.
 //
 // THE SIGNAL: self-consistency. Translate the same key twice with the SAME model (the loop
-// runs at temperature 0.2, loop.mjs:112) and compare. Where the model is sure it repeats
+// runs at temperature 0.2, loop.js:112) and compare. Where the model is sure it repeats
 // itself exactly; where it is guessing it wanders. Measured over the 40-key corpus, 30 of 40
 // keys came back byte-identical, and the two invisible defects above ranked #1 and #3 of the
 // ones that moved. The known FALSE positive (`· {n} tokens`, correctly left alone by every

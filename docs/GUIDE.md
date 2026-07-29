@@ -101,10 +101,10 @@ Edit the copy:
 ## 4. The workflow
 
 ```bash
-node src/translate.mjs config.json                  # 1. translate what changed, then check
-node src/translate.mjs config.json --probe          # 2. (optional) second opinion on meaning
-node src/review.mjs    config.json --lang es        # 3. fix what got flagged
-node src/translate.mjs config.json --check-only     # 4. in CI: verify, no engine needed
+node src/translate.js config.json                  # 1. translate what changed, then check
+node src/translate.js config.json --probe          # 2. (optional) second opinion on meaning
+node src/review.js    config.json --lang es        # 3. fix what got flagged
+node src/translate.js config.json --check-only     # 4. in CI: verify, no engine needed
 ```
 
 **1 — Translate.** Only keys that are new or changed get sent to the model; everything else is
@@ -129,7 +129,7 @@ no network, no API key. It exits non-zero if anything is wrong.
 a better one:
 
 ```bash
-node src/translate.mjs config.json --escalate gemini-free
+node src/translate.js config.json --escalate gemini-free
 ```
 
 ### Help docs → locale keys (optional)
@@ -147,8 +147,8 @@ hints:
 ```
 
 ```bash
-node src/extract.mjs config.json            # writes lede.* and hints.* into en.json
-node src/extract.mjs config.json --check    # CI: fails if they are stale
+node src/extract.js config.json            # writes lede.* and hints.* into en.json
+node src/extract.js config.json --check    # CI: fails if they are stale
 ```
 
 Then translate as usual — by that point they are ordinary keys.

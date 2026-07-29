@@ -24,20 +24,20 @@ them.
 
 | | file | what it is |
 |---|---|---|
-| 0. **Author** | `src/extract.mjs` | docs front-matter (`lede:` / `hints:`) → locale keys, so one sentence serves the article, the lede and the hint |
-| 1. **Translate** | `src/loop.mjs` | the batch loop — shielding, batching, retry, cache, two transports. Commodity, and ours anyway, for the reason below |
-| 2. **Verify** | `src/checks.mjs` + `src/suspects.mjs` | the checks (form) and `--probe` (meaning). **The differentiator** — nothing else does content QA on what a translator wrote |
-| 3. **Review** | `src/review.mjs` | triage: one local page, flagged rows first, edit, save, re-check |
+| 0. **Author** | `src/extract.js` | docs front-matter (`lede:` / `hints:`) → locale keys, so one sentence serves the article, the lede and the hint |
+| 1. **Translate** | `src/loop.js` | the batch loop — shielding, batching, retry, cache, two transports. Commodity, and ours anyway, for the reason below |
+| 2. **Verify** | `src/checks.js` + `src/suspects.js` | the checks (form) and `--probe` (meaning). **The differentiator** — nothing else does content QA on what a translator wrote |
+| 3. **Review** | `src/review.js` | triage: one local page, flagged rows first, edit, save, re-check |
 
 ```bash
-node src/translate.mjs config.json                    # translate what changed, then check
-node src/translate.mjs config.json --check-only       # check the files on disk. No engine. CI.
-node src/translate.mjs config.json --force            # re-translate everything
-node src/translate.mjs config.json --probe             # translate twice, flag where they disagree
-node src/translate.mjs config.json --escalate <prof>   # re-run ONLY the flagged keys, elsewhere
-node src/extract.mjs   config.json                     # docs front-matter -> locale keys
-node src/extract.mjs   config.json --check             # CI: fail if those keys are stale
-node src/review.mjs    config.json --lang es           # the review page
+node src/translate.js config.json                    # translate what changed, then check
+node src/translate.js config.json --check-only       # check the files on disk. No engine. CI.
+node src/translate.js config.json --force            # re-translate everything
+node src/translate.js config.json --probe             # translate twice, flag where they disagree
+node src/translate.js config.json --escalate <prof>   # re-run ONLY the flagged keys, elsewhere
+node src/extract.js   config.json                     # docs front-matter -> locale keys
+node src/extract.js   config.json --check             # CI: fail if those keys are stale
+node src/review.js    config.json --lang es           # the review page
 npm test                                               # node --test, 65 tests, no deps
 ```
 
@@ -54,7 +54,7 @@ Every quality failure measured on 2026-07-27 had one cause: **the request body b
 somebody else and we could not reach it.** A thinking flag we could not send, a
 `chat_template_kwargs` we could not set, a stale model id baked into a constant, a rate limit
 tuned for a different provider — one disease, four symptoms. So the request body is now a
-literal object in `src/loop.mjs`, and every provider quirk is a field in a profile
+literal object in `src/loop.js`, and every provider quirk is a field in a profile
 (`extraBody` merges into the body verbatim).
 
 The one adoption candidate that got a fair, timeboxed spike — `lingo.dev`, Apache-2.0, 5.4k
@@ -179,7 +179,7 @@ implementation), to save you one Ollama install.
 ### The review page
 
 ```bash
-node src/review.mjs just-ai-help.config.json --lang es    # http://localhost:4780
+node src/review.js just-ai-help.config.json --lang es    # http://localhost:4780
 ```
 
 One `node:http` server, one HTML page, no framework, no build, no dependencies, no account
@@ -202,7 +202,7 @@ by hand and later runs leave it alone. `--force` overrides the whole delta.
 ### Find the errors the checks cannot see — `--probe`
 
 ```bash
-node src/translate.mjs config.json --probe
+node src/translate.js config.json --probe
 ```
 
 Every check above is about **form**. A translation can satisfy all of them and still be
@@ -271,7 +271,7 @@ exactly like a run that worked.
 ### Escalate the flagged keys to a better engine
 
 ```bash
-node src/translate.mjs config.json --escalate <engine-profile>
+node src/translate.js config.json --escalate <engine-profile>
 ```
 
 Checks what is on disk, re-translates **only the keys the checks flagged** with the named
@@ -295,8 +295,8 @@ outcome rather than a hidden one.
 ## Author once, in the docs — `extract`
 
 ```bash
-node src/extract.mjs config.json            # write the generated keys into the source locale
-node src/extract.mjs config.json --check    # CI: fail if they are stale. Writes nothing.
+node src/extract.js config.json            # write the generated keys into the source locale
+node src/extract.js config.json --check    # CI: fail if they are stale. Writes nothing.
 ```
 
 The same sentence usually gets written three times: in the help article, as the surface's

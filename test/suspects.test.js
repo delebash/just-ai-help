@@ -1,15 +1,15 @@
 // The suspect list gets the same bar as every check: a clean case it must stay SILENT
 // about, and a real defect it must complain about. The defects below are not invented —
 // they are the exact strings two models produced on 2026-07-28, both of which passed every
-// structural check in checks.mjs. If this file ever goes quiet on them, the one thing this
+// structural check in checks.js. If this file ever goes quiet on them, the one thing this
 // module exists for has stopped working.
 //
 // node --test, zero dependencies.
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TEMPERATURE } from "../src/loop.mjs";
-import { rankSuspects, spread } from "../src/suspects.mjs";
+import { TEMPERATURE } from "../src/loop.js";
+import { rankSuspects, spread } from "../src/suspects.js";
 
 const codesFor = (findings) => findings.map((f) => f.code);
 const keysOf = (findings) => findings.map((f) => f.key);
@@ -92,7 +92,7 @@ test("length banding keeps a SHORT defect from being crowded out by long paragra
 test("the sampling temperature stays non-zero — the whole probe depends on it", () => {
 	// At temperature 0 the two passes are the same text by construction, so --probe would
 	// report "nothing disagreed" and mean nothing by it: a silent all-clear, which is the
-	// exact failure this project was built to stop. translate.mjs refuses to run --probe in
+	// exact failure this project was built to stop. translate.js refuses to run --probe in
 	// that state; this test makes the constant itself a tripwire so the refusal is never
 	// the first time anyone finds out.
 	assert.ok(TEMPERATURE > 0, `TEMPERATURE is ${TEMPERATURE} — --probe cannot work at 0`);

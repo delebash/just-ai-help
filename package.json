@@ -5,12 +5,12 @@
   "license": "GPL-3.0-or-later",
   "type": "module",
   "bin": {
-    "just-ai-help": "./src/translate.mjs"
+    "just-ai-help": "./src/translate.js"
   },
   "scripts": {
-    "translate": "node src/translate.mjs",
-    "extract": "node src/extract.mjs",
-    "review": "node src/review.mjs",
+    "translate": "node src/translate.js",
+    "extract": "node src/extract.js",
+    "review": "node src/review.js",
     "test": "node --test"
   },
   "engines": {

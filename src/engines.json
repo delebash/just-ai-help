@@ -8,7 +8,7 @@
     "model": "model id. A value starting \"REQUIRED\" means the config must supply it — a local server's model id is whatever YOU serve.",
     "apiKeyEnv": "optional. Name of the env var holding the key. Absent = no key needed. The key is never written to a file.",
     "headers": "optional. Extra request headers, merged verbatim.",
-    "extraBody": "optional. Merged into the JSON request body verbatim, last. The general pass-through. ONE exception: for kind \"ollama\", `extraBody.options` is merged one level deep into the built `options` rather than replacing it — otherwise setting num_ctx would silently drop temperature and the output cap. Temperature can be overridden here too; the --probe guard reads the EFFECTIVE temperature of the built request (loop.mjs effectiveTemperature), so an override to 0 is refused rather than silently measuring nothing.",
+    "extraBody": "optional. Merged into the JSON request body verbatim, last. The general pass-through. ONE exception: for kind \"ollama\", `extraBody.options` is merged one level deep into the built `options` rather than replacing it — otherwise setting num_ctx would silently drop temperature and the output cap. Temperature can be overridden here too; the --probe guard reads the EFFECTIVE temperature of the built request (loop.js effectiveTemperature), so an override to 0 is refused rather than silently measuring nothing.",
     "think": "optional. Ollama's top-level `think` field: false | true | \"low\" | \"medium\" | \"high\". Omitted when undefined, which leaves the model's own default alone. Deliberately has NO default — see the ollama row.",
     "batchSize": "how many keys go in one request.",
     "rateLimitMs": "optional. Minimum gap between requests. Omit or 0 for a local server.",

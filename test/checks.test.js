@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { buildContext, checkOne, runChecks } from "../src/checks.mjs";
+import { buildContext, checkOne, runChecks } from "../src/checks.js";
 
 const conventions = JSON.parse(readFileSync(new URL("../src/conventions.json", import.meta.url), "utf8"));
 

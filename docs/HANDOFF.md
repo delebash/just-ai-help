@@ -18,8 +18,8 @@ or online model, then re-read the files and assert what was written. **Author** 
 front-matter `lede:`/`hints:` become locale keys, so one sentence serves the article, the lede
 and the field hint and translates like any other key. Zero dependencies, Node 20+, 65 tests.
 
-Layers: `src/loop.mjs` (translate, ours since 2026-07-27) · `src/checks.mjs` + `src/suspects.mjs`
-(verify — the differentiator) · `src/review.mjs` (triage page) · `src/extract.mjs` (author).
+Layers: `src/loop.js` (translate, ours since 2026-07-27) · `src/checks.js` + `src/suspects.js`
+(verify — the differentiator) · `src/review.js` (triage page) · `src/extract.js` (author).
 
 ## MEASURED RESULTS — the current, clean set (2026-07-28)
 
@@ -66,7 +66,7 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
 
 ## WHAT REMAINS
 
-1. **The 18 flagged keys** — `node src/review.mjs config.json --lang es`. First real use of the
+1. **The 18 flagged keys** — `node src/review.js config.json --lang es`. First real use of the
    review page; also tells us whether the triage UI is any good.
 2. **The conversion sweep.** Spanish exists for the 846 converted keys, but the census (research
    doc R1) says ~1,719 JW strings are still hardcoded, plus 613 in the kit and 1,551 in
@@ -111,3 +111,9 @@ repo declares Node 20+). `src/engines.json` lost its false `_legacy` note and fo
 (grep-verified unused). Then, after the user caught the model-table errors described at the top
 of this file, `src/models.json` and the README's *Measured* section were rewritten from the
 research record, and `docs/GUIDE.md` was added as the short user-facing guide.
+
+Finally, **every `.mjs` became `.js`**. `package.json` already declared `"type": "module"`, so the
+extension was carrying no information — the commands are now `node src/translate.js`, and the
+whole repo, docs included, says `.js`. One trap found in passing: **`src/checks.js` is binary to
+git and invisible to ripgrep**, because `multiset()` joins on a literal NUL. A grep-based sweep
+that reports "clean" has not looked at that file — verify with something that reads bytes.

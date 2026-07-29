@@ -4,8 +4,8 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TEMPERATURE, buildRequest, buildSystemPrompt, cacheKey, effectiveTemperature, restore, shield } from "../src/loop.mjs";
-import { placeholderRe } from "../src/jsonutil.mjs";
+import { TEMPERATURE, buildRequest, buildSystemPrompt, cacheKey, effectiveTemperature, restore, shield } from "../src/loop.js";
+import { placeholderRe } from "../src/jsonutil.js";
 
 const re = placeholderRe({ prefix: "{", suffix: "}" });
 

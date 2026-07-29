@@ -82,7 +82,7 @@ failures/81 s. Thinking-off = 13× faster but corrupted `{n}`→`{nota}`. Full s
    (single-quoted esbuild banner breaks cmd.exe)". It stays as evidence + PR material;
    it is NOT the base going forward.
 2. `E:\Dev\Web\just-ai-help`: commit the pending edits (think passthrough in
-   translate.mjs, `"i18n-ai-translate": "file:../i18n-ai-translate"` in package.json).
+   translate.js, `"i18n-ai-translate": "file:../i18n-ai-translate"` in package.json).
 3. `E:\Dev\Web\justwrite-app`: gate the pending `rewriteDesc` edit — `npm run
    i18n:report` (MISSING must be 0), `npm run test:unit`, `npm run build:vite` — then
    commit it (copy fix, user-approved 2026-07-27 "your rec go").
@@ -125,12 +125,12 @@ whether its request body is shapeable (`think`, extraBody-equivalent).
 
 ## STEP 3A — integrate lingo.dev as Layer 1
 
-translate.mjs execs lingo.dev (child_process, `process.execPath` + its bin — never a
+translate.js execs lingo.dev (child_process, `process.execPath` + its bin — never a
 shell string; the Windows quoting lesson). Engine profiles map onto its provider config.
 `--check-only`, checks, and everything downstream unchanged. e2e gate: corpus run matches
 the fork's measured results. Then retire the fork (leave the repo; remove the `file:` dep).
 
-## STEP 3B — build Layer 1 ourselves: `src/loop.mjs` (~400–500 lines, zero new deps)
+## STEP 3B — build Layer 1 ourselves: `src/loop.js` (~400–500 lines, zero new deps)
 
 Node 20+ global fetch only. Spec — every decision closed:
 
@@ -189,9 +189,9 @@ foreground timeout), then `--check-only` + triage report. Deliverable: the real 
 Spanish into the app is the user's separate call). This closes "proven on a sample,
 unproven at scale".
 
-## STEP 7 — Layer 3: the review page (`src/review.mjs`)
+## STEP 7 — Layer 3: the review page (`src/review.js`)
 
-`node src/review.mjs config.json --lang es [--port 4780]`. node:http, ONE static HTML
+`node src/review.js config.json --lang es [--port 4780]`. node:http, ONE static HTML
 page inline CSS/JS (~150 lines, no framework, no build): GET `/api/data` → keys with
 source/target/flags; POST `/api/save {key, value}` → rewrite nested target JSON
 (structure rebuilt from the source file's shape so key order is preserved), re-run checks

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Function 2 — author the help system ONCE, in the docs, and let it become locale keys.
 //
-//     node src/extract.mjs [config.json]            write the generated keys into the source locale
-//     node src/extract.mjs [config.json] --check    CI: fail if they are stale, write nothing
+//     node src/extract.js [config.json]            write the generated keys into the source locale
+//     node src/extract.js [config.json] --check    CI: fail if they are stale, write nothing
 //
 // THE PROBLEM. The same sentence gets written three times: in the help article, as the
 // surface's one-line lede, and as a field's inline hint. Three copies drift, and each drifts
@@ -34,7 +34,7 @@
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { parseFrontMatter } from "./frontmatter.mjs";
+import { parseFrontMatter } from "./frontmatter.js";
 
 const argv = process.argv.slice(2);
 const checkOnly = argv.includes("--check");
@@ -152,7 +152,7 @@ if (checkOnly) {
 	// broken as a missing one, and neither is visible by reading either file alone.
 	if (changed) {
 		console.error(
-			`STALE: ${sourceFile} does not match ${docsDir}. Run: node src/extract.mjs ${configPath}`,
+			`STALE: ${sourceFile} does not match ${docsDir}. Run: node src/extract.js ${configPath}`,
 		);
 		process.exit(1);
 	}
