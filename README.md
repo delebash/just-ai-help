@@ -41,6 +41,10 @@ node src/review.mjs    config.json --lang es           # the review page
 npm test                                               # node --test, 65 tests, no deps
 ```
 
+> **Just want to use it?** [`docs/GUIDE.md`](docs/GUIDE.md) is the short version — which model
+> to pull for your machine, the commands, the workflow, and when to use an online engine. This
+> README is the long version: why every piece works the way it does.
+
 ## Why the loop is ours
 
 Every quality failure measured on 2026-07-27 had one cause: **the request body belonged to
@@ -142,9 +146,12 @@ ollama serve
 ollama pull gemma3:12b
 ```
 
-then set `"engine": "ollama"`. No API key. `gemma3:12b` is the profile default because it
-**won a bake-off**, not because it sounded right — see *Measured* below. Set `"model"` in
-your config to use anything else `ollama list` shows.
+then set `"engine": "ollama"`. No API key. `gemma3:12b` is the profile default because it was
+**measured**, not because it sounded right: zero real errors on the corpus at a size that fits
+an 8 GB card. It is not the most accurate model we ran — a 26B-A4B MoE beat it on accuracy
+*and* speed — but that one is a ~15 GB download, and availability is not a recommendation. Set
+`"model"` in your config to use anything else `ollama list` shows, and see *Measured* below or
+`src/models.json` for what each choice costs you.
 
 This uses the **native** Ollama engine rather than Ollama's OpenAI-compatible `/v1`, because
 compat layers are consistently less complete than native APIs — Google's returns bodyless
@@ -153,9 +160,12 @@ compat layers are consistently less complete than native APIs — Google's retur
 If you already run something else, `"engine": "local-openai-compatible"` points at any
 OpenAI-compatible server via `OPENAI_BASE_URL`.
 
-> **A raw llama.cpp server must be started with `--reasoning off`.** A thinking model returns
-> empty content otherwise — the deliberation fills `reasoning_content` and the token budget is
-> gone before any answer is written. Ollama users don't hit this.
+> **A thinking model needs its thinking turned off, on either transport.** It returns EMPTY
+> content otherwise: deliberation fills `reasoning_content` and the token budget is gone before
+> any answer is written. On a raw llama.cpp server, start it with `--reasoning off`. On Ollama,
+> set `"think": false` in your config — the profile deliberately sends no `think` field, so a
+> thinking model uses its own default and fails. Measured 2026-07-28: the 26B-A4B MoE returned
+> `Empty content from …/api/chat` on every retry until `think: false` was set.
 
 **This tool does not download or manage an engine, deliberately.** That job is ~1,000 lines of
 CUDA-build-by-compute-capability selection and platform unpacking (measured in a working
@@ -341,36 +351,59 @@ It runs at **build time**. Runtime stays plain vue-i18n — nothing parses markd
 Against a 40-key sample of a real app's catalog — chosen to break things: every plural-pipe
 key, 20 interpolations, the long named-slot paragraphs, glossary terms, and short labels.
 
-### The local bake-off (2026-07-27, two full runs each, scored by the checks above)
+### The clean re-measurement — 2026-07-28
 
-| | **gemma3:12b** | qwen3:8b |
-|---|---|---|
-| translated | 40/40 · 40/40 | 40/40 · 40/40 |
-| **structural** failures | **0 · 0** | **0 · 0** |
-| semantic flags | **1 · 2** | 3 · 7 |
-| missing `¿` (`startpunc`) | **0 · 0** | 1 · 5 |
-| length vs English | 1.16× | 1.15× |
-| time | 227 s · 219 s | 160 s · 116 s |
+Every earlier timing here was taken without ensuring the GPU was otherwise idle, and one of
+them was badly wrong because of it. These runs unload every resident model first
+(`POST /api/generate {keep_alive:0}`) and run strictly sequentially, on an 8 GB RTX 2070 Super
+with the RAM finally at its rated 3600 MT/s. 40/40 keys in 3 requests unless noted.
 
-Winner: **gemma3:12b** — fewest flags among the structurally clean. Time is only the
-tiebreak and was never reached.
+| model | size | structural | real errors | time |
+|---|---|---|---|---|
+| 26B-A4B MoE (`gemma-4-26b-a4b-qat`), GPU offload | ~15 GB | 0 | **0** | **73.8 s** |
+| the same MoE, genuinely CPU-only | ~15 GB | 0 | **0** | 128.8 s |
+| **gemma3:12b** — the default | 8.1 GB | 0 | **0** | 166.7 s |
+| Hy-MT2-7B (first-party Tencent GGUF) | 4.6 GB | 0 | 2–3 | **36.6 s** |
+| qwen3:8b | 5.2 GB | 0 | 3+ | 111.1 s |
+| translategemma:12b | 8.1 GB | **2 missing** | — | 366.2 s |
 
-**The finding worth keeping.** Both models were told the Spanish `¿` rule in the same system
-prompt. gemma3 obeyed it 5 times out of 5, twice. qwen3 missed it 5 times out of 5 on one run
-and 1 of 5 on the other — unreliable rather than simply wrong, which is worse to plan around.
-So that failure is **not prompt-fixable**; it is a model choice. That is exactly what a
-bake-off is for, and it is why the structural/semantic split matters: on structure the two
-models are indistinguishable, and structure is all a translator checks about itself.
+Timings reproduce to within 1% on a second run (MoE 73.8 / 74.2 s, Hy-MT2 36.6 / 37.8 s).
 
-### Earlier engine measurements (same corpus, before the loop was ours)
+**"Real errors" is not the flag count, and the difference matters.** The flagged strings were
+read rather than tallied, and the count was lying in *both* directions. `· {n} tokens` is
+flagged `untranslated` on every model that correctly left it alone — a false positive that
+penalises the right answer — while Hy-MT2 escaped that flag only by rewriting it to
+`· Tokens {n}`, reordering and capitalising for no reason, so the check **rewarded the worse
+output**. The MoE's one `numbers` flag did not reproduce on its second run: sampling noise, not
+a fault. A flag list is a worklist, not a verdict.
 
-| | Gemini 3.6 Flash (free) | local Gemma-26B on an 8 GB card |
-|---|---|---|
-| translated | 40/40 | 40/40 |
-| placeholders intact | 40/40 | 40/40 |
-| plural halves identical (bug) | 0 | 1 |
-| glossary held | 5/5 | 5/5 |
-| time | 94 s | 147 s |
+**Fastest and most accurate are not the same row.** Hy-MT2-7B is twice as fast as the MoE and
+is the least accurate of the models that finished: it misses the Spanish opening `¿` on the
+same key on **both** runs, and one run invented the noun *"proyectos"* in an otherwise fluent
+sentence. That is the same reproducible-`¿` failure that disqualified qwen3:8b, with the rule
+in the same system prompt — **not prompt-fixable, a model property.** It is a speed option
+that costs correctness, not a default.
+
+**A timing taken while another engine may hold VRAM is not a measurement.** Hy-MT2-7B read
+232.6 s on 2026-07-27 and 36.6 s here — 6.4×, entirely GPU contention. Bandwidth cannot explain
+it: at 4.6 GB the model never leaves the card. (gemma3:12b, which does partially offload, moved
+219–227 s → 166.7 s once the RAM ran at its rated speed — 1.3×, which is what a bandwidth
+improvement actually looks like.)
+
+**translategemma:12b is disqualified**, reversing its earlier standing. It had been the only
+local model with zero flags of any kind, rejected only on time. Measured clean it needed 23
+requests of retry-and-split, returned 38/40 keys and exhausted every retry on two of them — a
+structural failure. Its old result does not reproduce.
+
+**Why `gemma3:12b` is still the default** despite the MoE beating it on both axes: zero real
+errors at 8.1 GB, on a card that cannot hold a ~15 GB model. Availability is not a
+recommendation. If you have the disk and the RAM, the MoE is the better engine — see
+`src/models.json` for the per-tier reasoning.
+
+### The cloud row (not re-measured on 2026-07-28)
+
+Gemini 3.6 Flash: 40/40 keys, 40/40 placeholders, 8/8 pipes, 0 identical-half bugs, 94 s — the
+best quality-per-second here, and unusable for real work at 20 requests per day per model.
 
 Short labels blow up worst (1.5× on a 10-character nav item), so sidebars overflow before
 paragraphs do.

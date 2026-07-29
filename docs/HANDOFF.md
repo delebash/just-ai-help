@@ -1,145 +1,113 @@
-# HANDOFF — 2026-07-28, session end (user rebooting to enable XMP)
+# HANDOFF — current state, 2026-07-29
 
-Read this first in a new session, then `README.md`, then the research record in
-`justwrite-app/docs/plans/2026-07-26-i18n-single-source-research.md` (the "R3 CORRECTION"
-section onward is the evidence base for every decision here).
+Read this, then [`docs/GUIDE.md`](GUIDE.md) if you just want to run the thing, then `README.md`
+for why it is built this way.
 
-## THE FIRST THING TO DO
+> **READ THE RESEARCH RECORD BEFORE TOUCHING ANY MODEL CLAIM.** The evidence base is
+> `justwrite-app/docs/plans/2026-07-26-i18n-single-source-research.md`, and the sections from
+> "The clean re-measurement — 2026-07-28" onward (line ~785) supersede everything measured
+> before them. **This file was itself wrong for a day** because a session updated that document
+> and not this one, and the next session then "corrected" `src/models.json` from the stale
+> summary here — promoting a demoted model and calling the best model untested. If those two
+> documents ever disagree, the research record wins and this file is the thing to fix.
 
-**The user is rebooting to enable XMP/DOCP.** Their DDR4-3600 kit (`F4-3600C16-16GVKC`,
-2×16 GB, correctly in Channel A + B, MSI MAG B550 TOMAHAWK MAX WIFI) was running at
-**2133 MT/s** — the JEDEC fallback, i.e. the profile was never enabled. That is
-**34.1 GB/s where the hardware is rated for 57.6 GB/s**, a 69% bandwidth increase sitting
-in a BIOS menu.
+## What this repo is
 
-Verify it took:
+Two functions sharing one pipe. **Translate** a standard i18n JSON locale folder with a local
+or online model, then re-read the files and assert what was written. **Author** help docs whose
+front-matter `lede:`/`hints:` become locale keys, so one sentence serves the article, the lede
+and the field hint and translates like any other key. Zero dependencies, Node 20+, 65 tests.
 
-```powershell
-Get-CimInstance Win32_PhysicalMemory | Select-Object Speed,ConfiguredClockSpeed
-```
+Layers: `src/loop.mjs` (translate, ours since 2026-07-27) · `src/checks.mjs` + `src/suspects.mjs`
+(verify — the differentiator) · `src/review.mjs` (triage page) · `src/extract.mjs` (author).
 
-3600 = it worked. Still 2133 = A-XMP not saved. 3200 = they fell back, which is fine.
+## MEASURED RESULTS — the current, clean set (2026-07-28)
 
-**Why it matters beyond tidiness:** LLM decode is almost purely memory-bandwidth-bound, and
-their daily driver (`gemma-4-26b-a4b-qat`, 13.3 GB) does not fit their 8 GB card, so it
-streams offloaded layers through exactly that RAM. **Every desktop CPU number in our docs was
-measured on a misconfigured machine** — including the "pure CPU is not viable" verdict
-(`justwrite-app/docs/plans/2026-07-22-igpu-research-and-cpu-band-recovery.md:253`), which rests
-on 9.4 tok/s decode and 53 s cold TTFT measured at 2133. That verdict may deserve reopening,
-and if a modern CPU + 32 GB really can run the flagship at reading speed, JustWrite's hardware
-floor drops from "needs a decent GPU" to "needs 32 GB of RAM" — a product-scope question, not
-a benchmark one.
+Taken with every other model unloaded from VRAM and runs strictly sequential, on the 8 GB
+RTX 2070 Super with RAM at its rated 3600 MT/s (XMP **is enabled** — verified 3600/3600 on both
+DIMMs; the old "reboot to enable XMP" task is DONE). Numbers are real errors after READING the
+flagged strings, not raw flag counts.
 
-## THE RUN THAT WAS INTERRUPTED
+| engine | structural | real errors | time |
+|---|---|---|---|
+| `gemma-4-26b-a4b-qat` MoE, GPU offload (~15 GB) | 0 | **0** | **73.8 s** (retest 74.2) |
+| the same MoE, genuinely CPU-only | 0 | **0** | 128.8 s |
+| **gemma3:12b** — the shipped default (8.1 GB) | 0 | **0** | 166.7 s |
+| Hy-MT2-7B (4.6 GB) | 0 | 2–3 | **36.6 s** (retest 37.8) |
+| qwen3:8b (5.2 GB) | 0 | 3+ | 111.1 s |
+| translategemma:12b (8.1 GB) | **2 missing — FAIL** | — | 366.2 s |
+| Gemini 3.6 Flash (cloud, not re-measured) | 0 | 0 | 94 s — but 20 requests/DAY |
 
-`gemma-4-26b-a4b-qat` (the user's flagship MoE) on the 40-key corpus — **staged but never
-completed**. It is the most promising untested candidate: under the OLD pipeline it was the
-FASTEST local model measured (147 s vs gemma3:12b's 219-227 s), because it is 26B with only
-~4B active, and its single defect then was one identical-halves plural — exactly the class
-that shielding now prevents by construction.
+**The flagship MoE is the most accurate thing measured, and it is faster on CPU alone than the
+default is with a GPU.** It needs `"think": false` — it is a thinking model and returns empty
+content otherwise. It is not the shipped default only because it is a ~15 GB download.
 
-It failed at startup with `500 … model name=gemma-4-26b-a4b-qat failed to load` after 21 s,
-because Ollama still had `qwen3:14b` (9.2 GB) resident in VRAM. **Two engines cannot share
-8 GB.** Unload Ollama first (`POST /api/generate {"model":"…","keep_alive":0}`), THEN start
-llama-server. `.evidence/` has nothing for this model yet; `mt-bakeoff/flagship-moe/server.err`
-in the scratchpad (7 KB) was never read and may hold a different cause.
+**Hy-MT2-7B is the speed option and it costs correctness** — a reproducible Spanish `¿` miss on
+the same key across both runs, plus a hallucinated noun. Not a default.
 
-Staged config: `C:\Users\danel\.claude\jobs\5b32e070\tmp\mt-bakeoff\flagship-moe\config.json`
-(engine `local-openai-compatible`, url `http://127.0.0.1:8080/v1`, model `gemma-4-26b-a4b-qat`).
-Runner script: `mt-bakeoff/run-flagship.ps1` — it starts llama-server from the user's own
-tuned `models.ini` with `--reasoning off`, runs, and stops the server.
+**translategemma:12b is disqualified**; its old flawless result does not reproduce.
 
-**Re-run it AFTER the XMP change** — the result is now also a bandwidth measurement.
+**A timing taken while another engine may hold VRAM is not a measurement** — Hy-MT2 read 232.6 s
+under contention and 36.6 s clean.
+
+Evidence files in `.evidence/` (gitignored) are the **2026-07-27** runs — superseded for
+timings, still valid as sample output. `corpus40-en.json` is the 40-key stress corpus itself.
+
+**Full 846-key JW catalogue**, gemma3:12b: 846/846 in 52 min, 56 requests, zero placeholder /
+plural / glossary / missing failures. After the conventions fix + `--escalate`: 99 findings →
+23, 63 keys → 18.
 
 ## STATE OF THE REPOS
 
 | repo | branch | state |
 |---|---|---|
-| `just-ai-help` | `main` | **ahead 1** (`c5e49a5` models.json) — published at github.com/delebash/just-ai-help |
-| `justwrite-app` | `claude/book-layout-…` | clean + 1 modified doc, committed below |
-| `just-llm-runner` | same | clean, level with origin |
-| `i18n-ai-translate` | `master` | **ahead 1**, and `origin` is **taahamahdi's** repo — do NOT push. Needs the user's own GitHub fork before any PR. Its `--think` work is likely superseded now that we own the loop. |
+| `just-ai-help` | `main` | ahead of origin — published at github.com/delebash/just-ai-help |
+| `i18n-ai-translate` | `master` | ahead 1 (`0d7168a`, the `--think` work). `origin` is **taahamahdi's** — do NOT push. Needs the user's own fork before any PR, and the work is largely superseded now that we own the loop. |
 
-## MEASURED RESULTS — do not re-measure these
+## WHAT REMAINS
 
-Preserved in `.evidence/` (gitignored) because the scratchpad may not survive:
-`corpus40-en.json` (the 40-key stress corpus), plus the es output from Gemini, gemma3:12b,
-qwen3:8b and Hy-MT2-7B; and `jw-846-keys-es-after-escalate.json` + its run log.
-
-**40-key corpus** (all 8 plural pipes, 20 interpolations, 10 slot paragraphs, 7 glossary keys,
-15 short labels):
-
-| engine | structural | semantic | time |
-|---|---|---|---|
-| Gemini 3.6 Flash (cloud) | 0 | 0 | 94 s — but 20 requests/DAY, smoke only |
-| **gemma3:12b** (current default, 8.1 GB) | 0 | 1 and 2 | 219-227 s |
-| **Hy-MT2-7B** (first-party Tencent GGUF, **4.6 GB**) | 0 | 2 | 233 s |
-| qwen3:8b (5.2 GB) | 0 | 3 and 7 | 116-160 s |
-| translategemma:12b (8.1 GB) | 0 | 0 | 1,145 s |
-| translategemma:4b (3.3 GB) | **FAIL** — translated `Strands`→`Hilos`, dropped a key | | 81 s |
-| gemma-4-26b-a4b-qat | (old pipeline) 1 plural bug | | **147 s — fastest** |
-
-**Hy-MT2-7B is tied with the default at 57% of the disk size** — one run does not unseat a
-two-run winner, so a SECOND Hy-MT2 run is the cheap way to settle the 8 GB tier.
-`qwen3:14b` was abandoned (9.3 GB on an 8 GB card; and the family's ¿ weakness is known).
-
-**Full 846-key JW catalogue**, gemma3:12b: 846/846 in 52 min, 56 requests, **zero** placeholder
-/ plural / glossary / missing failures, 0 of 16 real questions lost their ¿. After the
-conventions fix + `--escalate`: **99 findings → 23, 63 keys → 18**.
-
-## WHAT REMAINS, in priority order
-
-1. **Verify XMP, then re-run the flagship MoE** (above). Possibly re-run one CPU-only bench leg.
-2. **Second Hy-MT2-7B run** → settle the 8 GB default; update `src/models.json` + README.
-3. **Function 2 — the docs → `lede:`/`hints:` extraction.** THE reason this repo exists per the
-   user's own framing ("function 1 alone wouldn't justify a repo"). Entirely unbuilt.
-4. **The 18 flagged keys** — `node src/review.mjs config.json --lang es`. First real use of the
+1. **The 18 flagged keys** — `node src/review.mjs config.json --lang es`. First real use of the
    review page; also tells us whether the triage UI is any good.
-5. **The conversion sweep.** Spanish exists for the 846 converted keys, but the census
-   (research doc R1) says ~1,719 JW strings are still hardcoded, plus 613 in the kit and 1,551
-   in JustVoice. The pipeline is solved; the conversion is not.
-6. **`LICENSE` files.** All three public repos declare GPL-3.0-or-later in metadata and ship no
-   LICENSE file — legally that grants nobody anything. User's call, not done.
+2. **The conversion sweep.** Spanish exists for the 846 converted keys, but the census (research
+   doc R1) says ~1,719 JW strings are still hardcoded, plus 613 in the kit and 1,551 in
+   JustVoice. The pipeline is solved; the conversion is not.
+3. **`--probe` at scale** — validated on the 40-key corpus, not yet on the full 846.
+4. **LICENSE files** — `just-ai-help` has one (GPL-3.0). The other public repos still declare
+   GPL in metadata and ship none, which legally grants nobody anything. User's call.
 
 ## USER-OWNED — never do these unasked
 
-Pushing `just-ai-help` (1 commit waiting) · any PR to the i18n-ai-translate upstream ·
-shipping `es.json` into JustWrite · rotating the Gemini API key that passed through chat ·
-adding LICENSE files.
+Pushing any repo · any PR to the i18n-ai-translate upstream · shipping `es.json` into JustWrite
+· rotating the Gemini API key that passed through chat · adding LICENSE files elsewhere.
 
-## TWO PROCESS LESSONS FROM TODAY — worth not repeating
+**And the standing rule above all: do nothing without an explicit "go".** A question is a
+question, not authorization.
 
-**Check processes properly.** Twice I inferred process state from an indirect signal and was
-wrong both times: I called the executor's healthy 846-key run "stalled" (it was 68% done; its
-output was buffered in a `tail` pipe) and killed it, and I called my own qwen3:14b run dead
-because a bash `ps` couldn't see Windows processes — it was alive, and my "replacement" run
-then competed with it for the GPU until both timed out. Use
-`Get-CimInstance Win32_Process -Filter "Name='node.exe'"` and read the CommandLine.
+## PROCESS LESSONS — worth not repeating
 
-**Never let two runs share one GPU.** Unload/stop the first engine explicitly and verify VRAM
-is free (`GET /api/ps` for Ollama) before starting the second.
+**Docs go stale in the place you are not looking.** Today's largest error: model facts were
+updated in the research doc and not here, and a later session rewrote `models.json` from this
+file's stale table. When a measurement lands, update EVERY place that states it, or point the
+stale place at the fresh one in the same change.
 
-## 2026-07-29 ADDENDUM — the design review and the fixes it produced
+**Never let two runs share one GPU.** Unload the first engine explicitly and verify VRAM is free
+(`GET /api/ps`) before starting the second. This is not tidiness: it produced a 6.4× wrong
+timing that stood as a "measurement" for a day and nearly changed the default model.
 
-A full design review of this repo ran on 2026-07-29 (every src module and config read, the
-suite run). Verdict: the architecture stands — owned loop, checks-as-spec, probe, one-file
-review page all confirmed on the merits, nothing structural changed. Five fixes landed, one
-commit. First, the `--probe` temperature guard had a hole: it read the `TEMPERATURE` constant,
-but a profile can pin `temperature: 0` through `extraBody` (which merges into the request body
-last), which would have silently produced exactly the meaningless all-clear the guard exists to
-refuse. The guard now reads `effectiveTemperature(profile)` in `src/loop.mjs`, which derives
-the value from the BUILT request body rather than from a second copy of the merge rules, so the
-two can never drift. Second, `npm test` is now plain `node --test` (default recursive
-discovery): the old quoted glob needs Node 21+ while the repo declares Node 20+, and the
-directory form (`node --test test/`) empirically fails on this machine (Node 26.5.0, win32) —
-argless discovery passes 65/65 and is documented Node 20 behavior. Third, `src/models.json` now
-records Hy-MT2-7B in the 8 GB tier as measured-ONCE (`hf.co/tencent/Hy-MT2-7B-GGUF`, verified
-first-party at huggingface.co/tencent/Hy-MT2-7B-GGUF) — the file's own rule demanded a row for
-a measured model, and the "second run settles the tier" item above stays open. Fourth, every
-8 GB wall time in models.json now carries the 2133 MT/s caveat from this document, since the
-numbers were measured on the misconfigured RAM. Fifth, `src/engines.json` lost its `_legacy`
-note (it claimed the tool still shells out to i18n-ai-translate — false since the owned loop)
-and the four dead fields it excused (`engine`/`defaultHost`/`baseUrlEnv`/`batchMaxTokens`),
-grep-verified to have zero consumers. README updated in the same change: the probe is a full
-second pass (not "doubles"), and the guard's description says "effective temperature". Suite
-after all of it: 65/65.
+**Check processes properly.** Twice a session inferred process state from an indirect signal and
+was wrong: a healthy 846-key run was called "stalled" (it was 68% done, output buffered in a
+`tail` pipe) and killed, and a live run was called dead because a bash `ps` cannot see Windows
+processes. Use `Get-CimInstance Win32_Process -Filter "Name='node.exe'"` and read the CommandLine.
+
+## 2026-07-29 — what this session did
+
+Reviewed the whole design (verdict: the architecture stands — owned loop, checks-as-spec,
+probe, one-file review page), then fixed what the review found. `--probe`'s temperature guard
+read the `TEMPERATURE` constant, but a profile can pin `temperature: 0` via `extraBody`, which
+would have produced exactly the meaningless all-clear the guard exists to refuse; it now reads
+`effectiveTemperature(profile)`, derived from the BUILT request body so the guard and the body
+cannot drift. `npm test` became plain `node --test` (the quoted glob needs Node 21+ while the
+repo declares Node 20+). `src/engines.json` lost its false `_legacy` note and four dead fields
+(grep-verified unused). Then, after the user caught the model-table errors described at the top
+of this file, `src/models.json` and the README's *Measured* section were rewritten from the
+research record, and `docs/GUIDE.md` was added as the short user-facing guide.
