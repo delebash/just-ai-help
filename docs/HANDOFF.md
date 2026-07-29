@@ -66,12 +66,26 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
 
 ## WHAT REMAINS
 
+> ⚠️ **The Spanish output no longer exists. Checked 2026-07-29: there is no `es.json` anywhere
+> in the workspace** — not in `justwrite-app/src/renderer/src/i18n/locales/` (which holds only
+> `en.json`), not anywhere else under `E:\Dev\Web`. The 846-key run really happened, but its
+> result was never committed, and "shipping `es.json` into JustWrite" is on the USER-OWNED list
+> below, so it never landed. Items 1 and 3 both took that file as their input. **Neither is
+> doable until a fresh run produces it** — Ollama up, `gemma3:12b`, ~52 min. `en.json` has also
+> grown to **867 keys**, so a re-run is not a reproduction of the old one.
+
 1. **The 18 flagged keys** — `node src/review.js config.json --lang es`. First real use of the
-   review page; also tells us whether the triage UI is any good.
-2. **The conversion sweep.** Spanish exists for the 846 converted keys, but the census (research
-   doc R1) says ~1,719 JW strings are still hardcoded, plus 613 in the kit and 1,551 in
-   JustVoice. The pipeline is solved; the conversion is not.
-3. **`--probe` at scale** — validated on the 40-key corpus, not yet on the full 846.
+   review page; also tells us whether the triage UI is any good. **Blocked:** the 18 findings
+   describe a file that no longer exists (see above). The finding *names* were reported to the
+   terminal at the time and were not saved either, so re-running is the only route back.
+   Requires a config too — the repo ships only `just-ai-help.config.example.json`, and whatever
+   config drove the 846-key run was never committed.
+2. **The conversion sweep** — the real remaining work, and unaffected by the above. The census
+   (research doc R1) says ~1,719 JW strings are still hardcoded, plus 613 in the kit and 1,551
+   in JustVoice. The pipeline is solved; the conversion is not.
+3. **`--probe` at scale** — validated on the 40-key corpus, not yet on a full catalogue.
+   **Blocked on the same re-run**, and note probe doubles it: two passes, so ~2 hours for 867
+   keys, not 52 minutes.
 4. ~~**LICENSE files**~~ — **DONE 2026-07-29, and the whole family is now MIT.** Every repo
    (`just-ai-help`, `just-llm-runner`, `justwrite-app`, `justwrite-website`, `claude-config`,
    `JustVoice`) ships an MIT `LICENSE` with matching metadata. The user's decision was explicit:
@@ -84,11 +98,12 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
    `claude/admiring-galileo-il3q0o`, not `main`, so GitHub still reports GPL-3.0 for it until
    that merges.**
 
-   Two restrictions survive an MIT relicense and are the user's to decide on — both are about
-   model *weights*, not code: TADA's weights carry the **Llama 3.2 Community License**, which
-   obliges anyone shipping the app to display "Built with Llama" in UI and docs
-   (`JustVoice/docs/engines.md`), and `JustVoice/LICENSES.md` still lists **`qwen-tts`** as
-   `verify upstream | TBD`.
+   Both weights-licence loose ends are now closed too. **`qwen-tts` is Apache-2.0** — verified
+   per JustVoice's own refresh policy, from the upstream `LICENSE` (Alibaba Cloud) and the
+   HuggingFace model card, not the PyPI classifier. And TADA's **"Built with Llama"** notice
+   (Llama 3.2 §1.b) turned out **not to be displayed at all**: the string reached the API
+   (`engines_api.py:98`) and no UI code ever read it, while `docs/engines.md` and a comment in
+   `models.py` both claimed it was on screen. Now rendered as a pill on the Engines card.
 
 ## USER-OWNED — never do these unasked
 
@@ -127,8 +142,32 @@ repo declares Node 20+). `src/engines.json` lost its false `_legacy` note and fo
 of this file, `src/models.json` and the README's *Measured* section were rewritten from the
 research record, and `docs/GUIDE.md` was added as the short user-facing guide.
 
-Finally, **every `.mjs` became `.js`**. `package.json` already declared `"type": "module"`, so the
+Then **every `.mjs` became `.js`**. `package.json` already declared `"type": "module"`, so the
 extension was carrying no information — the commands are now `node src/translate.js`, and the
 whole repo, docs included, says `.js`. One trap found in passing: **`src/checks.js` is binary to
 git and invisible to ripgrep**, because `multiset()` joins on a literal NUL. A grep-based sweep
 that reports "clean" has not looked at that file — verify with something that reads bytes.
+
+Then the session moved to **JustVoice, and the whole family went MIT** — see item 4 above. The
+work that unblocked it: `pedalboard` (GPL-3.0 via JUCE) was the only copyleft dependency anywhere,
+so its twelve effects were reimplemented as `JustVoice/server/justvoice/audio/dsp/` on
+numpy + scipy, with pitch shifting delegated to `python-stretch` (Signalsmith Stretch, MIT — and
+measurably better than the Rubber Band engine pedalboard used). Reverb is a port of the same
+public-domain Freeverb JUCE already wrapped, using JUCE's exact scaling constants so persisted
+user chains keep sounding the same. 78 effects tests pass; **how it SOUNDS is still unverified**
+and is the user's next task.
+
+Three findings from that stretch worth carrying, all of the same shape — **a claim in a doc that
+the code never implemented**:
+
+- `CONTRACT.md`, JustVoice's authoritative boundary doc, described JustWrite orchestrating renders
+  over HTTP and muxing M4B in-browser. JustWrite has held no audio code for some time; M4B is
+  server-side. Being authoritative, it had seeded the error into three other docs.
+- The **"Built with Llama"** notice was plumbed through four backend layers and rendered by none,
+  while two places asserted it was on screen. A licence obligation, unmet.
+- `docs/effects.md` described a "Robotic" preset of "Pitch ±2 st · Bitcrusher · Comb filter". The
+  seeded chain is a chorus. **Every row of that preset table was wrong.**
+
+The lesson generalises past this repo's own "docs go stale" note below: **a doc describing an
+intended end state is indistinguishable from one describing reality.** Each of these read as
+finished features to anyone auditing from the layer below. Read the seed data, not the table.
