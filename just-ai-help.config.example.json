@@ -13,10 +13,12 @@
 
   "engine": "ollama",
 
+  "_engines": "rows in src/engines.json: \"ollama\" = local, the default 26B-A4B QAT MoE (~15 GB, most accurate and fastest measured, already set think:false for you) · \"ollama-gemma3\" = local, gemma3:12b (8.1 GB, equally accurate, 2.3x slower) · \"gemini-free\" = online smoke test only, 20 requests/day · \"openai\" = online, paid · \"local-openai-compatible\" = your own llama-server / LM Studio / vLLM. Switching engine is safer than overriding model: each row already carries the right settings for the model it names.",
+
   "_optional": {
-    "model": "override the engine profile's model — required for a local server, whose model id is whatever YOU serve",
+    "model": "override the engine profile's model — required for a local server, whose model id is whatever YOU serve. Must be a pullable tag, e.g. hf.co/tencent/Hy-MT2-7B-GGUF:Q4_K_M, not a shorthand.",
     "url": "override the engine profile's base URL",
-    "think": "ollama only: false | true | 'low' | 'medium' | 'high'. Omitted = the model's own default. Off is much faster and measurably worse on placeholders.",
+    "think": "ollama only: false | true | 'low' | 'medium' | 'high'. Omitted = the model's own default. Set it to match the model you named: a thinking model returns EMPTY content unless it is false, and a non-thinking model does not care. Off on a thinking model is much faster and measurably worse on placeholders, so do not set it globally out of habit.",
     "profile": "any other engine-profile field, overridden per project — batchSize, rateLimitMs, timeoutMs, maxOutputTokens, headers, extraBody"
   }
 }

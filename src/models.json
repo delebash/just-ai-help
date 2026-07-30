@@ -13,23 +13,26 @@
 
   "tiers": {
     "8gb": {
-      "_measured_on": "RTX 2070 Super, 8 GB VRAM, 32 GB system RAM at its rated 3600 MT/s, Ollama, 2026-07-28. Note that VRAM is not the only constraint — the MoE below is a ~15 GB download that runs here by offloading, so disk and system RAM decide whether you can use it at all.",
+      "_measured_on": "RTX 2070 Super, 8 GB VRAM, 32 GB system RAM at its rated 3600 MT/s, Ollama, 2026-07-28. Note that VRAM is not the only constraint — the recommendation is a ~15 GB model that runs on this 8 GB card by offloading, so disk and SYSTEM RAM are what decide whether you can use it at all. Tier names in this file are VRAM; the memory the MoE needs is VRAM and system RAM together.",
       "recommended": {
-        "model": "gemma3:12b",
-        "size_gb": 8.1,
+        "model": "hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL",
+        "also_called": "Gemma-4 26B-A4B QAT, instruction-tuned, unsloth's UD-Q4_K_XL dynamic quant. Earlier revisions of this file called it `gemma-4-26b-a4b-qat`, which is a shorthand and not pullable — the tag above is the real one and is what was measured.",
+        "size_gb": 15,
         "status": "measured",
-        "result": "0 structural failures, 1 semantic flag, ZERO real errors after reading; 166.7 s for the corpus",
-        "why": "the right pick for a machine that cannot hold the flagship. It is NOT the most accurate or the fastest model measured — the 26B-A4B MoE beats it on both — but that one is a ~15 GB download, and availability is not a recommendation. gemma3:12b finishes with zero real errors at a size that fits an 8 GB card, including 0/5 misses on the Spanish opening ¿ across every run it has had.",
-        "pull": "ollama pull gemma3:12b"
+        "result": "0 structural failures, ZERO real errors, in THREE placements: GPU offload 73.8 s (retest 74.2 s), genuinely CPU-only 128.8 s, Ollama num_gpu:0 132.0 s (retest 131.9 s). REPRODUCED 2026-07-29 under the shipped default with no overrides at 69.8 s including a cold model load, 3 requests, 0 structural, 0 real errors — its one flag being the documented `· {n} tokens` false positive. Output saved: .evidence/corpus40-gemma4-moe-es.json",
+        "why": "the most accurate AND the fastest thing measured here — it beats gemma3:12b (166.7 s) on time even when it runs on the CPU alone, which also leaves the graphics card completely free. 26B parameters with only ~4B active per token is what a MoE is for. It needs `think: false`: it is a thinking model and returns empty content otherwise, so the `ollama` engine row carries that field.",
+        "requires": "~15 GB of memory across VRAM and system RAM, plus the 15 GB download. Measured on 8 GB VRAM + 32 GB system RAM. More VRAM only helps. If your machine has 16 GB of system RAM and no large card this is the untested case and may swap — use gemma3:12b below.",
+        "pull": "ollama pull hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL",
+        "_pull_correction": "Until 2026-07-29 this row said \"not a public Ollama tag — supply your own GGUF\". That was wrong in the way that matters: it is not in Ollama's own curated library, but `hf.co/<owner>/<repo>:<quant>` is a first-class tag that `ollama pull` fetches from HuggingFace directly — the same mechanism the Hy-MT2 row states as an ordinary pull command. No manual download, no Modelfile. The false instruction was also the stated reason this model was not the default, so it cost a better default for a day."
       },
       "alternatives": [
         {
-          "model": "gemma-4-26b-a4b-qat (Gemma-4 26B-A4B QAT GGUF, served by Ollama or llama-server)",
-          "size_gb": 15,
+          "model": "gemma3:12b",
+          "size_gb": 8.1,
           "status": "measured",
-          "result": "0 structural failures, ZERO real errors, in THREE placements: GPU offload 73.8 s (retest 74.2 s), genuinely CPU-only 128.8 s, Ollama num_gpu:0 132.0 s (retest 131.9 s)",
-          "why": "the most accurate thing measured here, and faster than the 8 GB default even when it runs on the CPU alone — 26B with only ~4B active is what a MoE is for. Not the recommendation only because of the ~15 GB download. Two practical notes: it is a THINKING model, so it returns empty content until you set `think: false` in your config (the ollama profile deliberately sends no think field); and running it entirely on CPU leaves the card completely free, which on this machine still beat the default running WITH GPU offload.",
-          "pull": "not a public Ollama tag — supply your own Gemma-4 26B-A4B QAT GGUF and set `model` (and `think: false`) in your config"
+          "result": "0 structural failures, 1 semantic flag, ZERO real errors after reading; 166.7 s for the corpus",
+          "why": "the small-download option, and the right pick when ~15 GB of model will not fit your disk or your memory. Accuracy is equal to the recommendation — zero real errors, including 0/5 misses on the Spanish opening ¿ across every run it has had — and it costs 2.3x the time. It WAS the recommendation until 2026-07-29, on the argument that a ~15 GB download should not be the default; that argument fell over when the MoE's supposed manual-download requirement turned out to be one ordinary `ollama pull`, leaving download size as the only objection to a model that is both more accurate and faster. Use the `ollama-gemma3` engine row.",
+          "pull": "ollama pull gemma3:12b"
         },
         {
           "model": "hf.co/tencent/Hy-MT2-7B-GGUF:Q4_K_M",
@@ -72,10 +75,9 @@
     },
 
     "16gb": {
-      "recommended": null,
-      "_note": "No 16 GB card here, so nothing is measured ON one. The evidence-backed reasoning: the 26B-A4B MoE already ran clean with zero real errors at 73.8 s while OFFLOADING on an 8 GB card, so a 16 GB card can only help it — that is the first thing to try, and a measured run would likely make it this tier's recommendation.",
+      "recommended": "hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL — the same model as the 8gb tier, which is also the shipped default",
+      "_note": "No 16 GB card here, so nothing is measured ON one, and the recommendation above is inherited rather than tier-specific. The evidence behind it: the MoE ran clean with zero real errors at 73.8 s while OFFLOADING on an 8 GB card, and 16 GB of VRAM removes some or all of that offload — it can only help. What a run on this tier would add is a number, not a different answer.",
       "candidates": [
-        { "model": "gemma-4-26b-a4b-qat", "status": "available", "why": "measured clean on 8 GB via offload (see the 8gb tier); more VRAM removes the offload penalty. Needs think:false." },
         { "model": "hf.co/tencent/Hy-MT2-30B-A3B-GGUF:Q4_K_M", "status": "available", "why": "first-party Tencent GGUF, a 30B MoE with ~3B active. Caveat from measurement: the 7B of this family has a reproducible Spanish ¿ failure, so verify that before trusting the family." },
         { "model": "gemma3:27b", "status": "available", "why": "larger sibling of the model that is clean at 8 GB." }
       ]

@@ -23,22 +23,38 @@ npm test            # 65 tests, should all pass
 
 ---
 
-## 2. Pick a model for your machine
+## 2. Get the model
 
-Install Ollama once (it handles the download and your GPU), then pull one model:
+Install Ollama once (it handles the download and your GPU), then run these two commands. This
+is the default and you do not have to choose anything:
 
 ```bash
-ollama serve                    # leave this running
-ollama pull gemma3:12b          # then pull the row you picked below
+ollama serve            # leave this running
+ollama pull hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL
 ```
 
-| your machine | pull this | why |
+That is a normal `ollama pull` — Ollama fetches it from HuggingFace for you. **There is nothing
+to download by hand.**
+
+**What you get.** Gemma-4 26B-A4B QAT: a 26-billion-parameter model that only uses about 4
+billion of them per word, so it is both the **most accurate and the fastest** model we measured
+— 40 test keys in ~74 s using your graphics card, or ~129 s on the processor alone, with zero
+errors either way. For comparison the runner-up takes ~167 s. It is a 15 GB download.
+
+**What it needs.** About 15 GB of memory, which Ollama spreads across your graphics card and
+your system RAM. We measured it on an 8 GB card with 32 GB of system RAM. More graphics memory
+only makes it faster.
+
+### Pick something else only in these cases
+
+| if | use | how |
 |---|---|---|
-| **8 GB graphics card** (the common case) | `ollama pull gemma3:12b` | 8.1 GB, zero real errors on our test corpus, ~167 s for 40 keys. The default. |
-| **No GPU, but 32 GB RAM** | a Gemma-4 26B-A4B QAT GGUF (~15 GB) | a 26B model with only ~4B active, so it runs on CPU alone in ~129 s — faster than the 8 GB default *with* a GPU. Needs `"think": false` (see troubleshooting). |
-| **16 GB+ card** | same 26B MoE, or `ollama pull gemma3:27b` | the MoE at ~74 s with GPU offload was the most accurate thing we measured. |
-| **You want it fast and will review the output** | `ollama pull hf.co/tencent/Hy-MT2-7B-GGUF:Q4_K_M` | 4.6 GB, ~37 s — twice as fast as anything else, but it makes real mistakes (see below). |
-| **4 GB or less** | nothing we can recommend | the only small model we tested failed badly. Use the cloud instead. |
+| **15 GB will not fit** — small disk, or 16 GB of system RAM and no big card | `gemma3:12b` (8.1 GB) | `ollama pull gemma3:12b`, then set `"engine": "ollama-gemma3"` |
+| **You want it fast and will review the output** | Hy-MT2-7B (4.6 GB) | `ollama pull hf.co/tencent/Hy-MT2-7B-GGUF:Q4_K_M`, then set `"model"` to that tag |
+| **4 GB or less to work with** | an online model | see below — nothing local we tested is good enough |
+
+**About `gemma3:12b`.** Just as accurate — also zero real errors — and 2.3× slower. Nothing is
+wrong with it; it is simply the smaller download. It was the default until 2026-07-29.
 
 **About the fast option.** Hy-MT2-7B is genuinely the quickest, but on our corpus it
 reproducibly dropped the Spanish opening `¿` and once invented a word that was not in the
@@ -93,8 +109,13 @@ Edit the copy:
 - **`context`** — one sentence about your app. It goes in the prompt and genuinely changes
   word choice.
 - **`glossary.doNotTranslate`** — brand names and terms that must survive untouched.
-- **`model`** — add this to override the engine's default model, e.g. `"model":
-  "hf.co/tencent/Hy-MT2-7B-GGUF:Q4_K_M"`.
+- **`engine`** — which row of `src/engines.json` to use. `"ollama"` is local with the default
+  26B MoE; `"ollama-gemma3"` is local with the smaller `gemma3:12b`; `"gemini-free"` and
+  `"openai"` are online. Each row already carries the right settings for the model it names, so
+  switching model by switching *engine* is the option that cannot go wrong.
+- **`model`** — overrides the engine row's model, e.g. `"model":
+  "hf.co/tencent/Hy-MT2-7B-GGUF:Q4_K_M"`. If the model you name is a *thinking* model, add
+  `"think": false` too, or it will return nothing (see troubleshooting).
 
 ---
 
@@ -158,8 +179,10 @@ Then translate as usual — by that point they are ordinary keys.
 ## 5. Troubleshooting
 
 **"Empty content from …/api/chat"** — you are running a *thinking* model and it spent its
-whole token budget deliberating. Add `"think": false` to your config (Ollama), or start
-llama.cpp's server with `--reasoning off`. This affects the 26B MoE above.
+whole token budget deliberating before writing an answer. Add `"think": false` to your config
+(Ollama), or start llama.cpp's server with `--reasoning off`. You should not hit this with the
+default engine, which already sets `think: false` for you — it comes up when you point `model`
+at a different thinking model, or set `"think"` yourself.
 
 **It is much slower than the table says** — another model is probably still loaded and holding
 your VRAM. Unload it and re-run; a timing taken while something else holds the GPU is not a

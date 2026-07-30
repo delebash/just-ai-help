@@ -146,15 +146,25 @@ There is no `npm install` step — there is nothing to install.
 
 ```bash
 ollama serve
-ollama pull gemma3:12b
+ollama pull hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL
 ```
 
-then set `"engine": "ollama"`. No API key. `gemma3:12b` is the profile default because it was
-**measured**, not because it sounded right: zero real errors on the corpus at a size that fits
-an 8 GB card. It is not the most accurate model we ran — a 26B-A4B MoE beat it on accuracy
-*and* speed — but that one is a ~15 GB download, and availability is not a recommendation. Set
-`"model"` in your config to use anything else `ollama list` shows, and see *Measured* below or
-`src/models.json` for what each choice costs you.
+then set `"engine": "ollama"`. No API key. That 26B-A4B QAT MoE is the profile default because
+it was **measured**, not because it sounded right: zero real errors on the corpus and the
+fastest thing we ran, 73.8 s with GPU offload and 128.8 s on the CPU alone — so it beats the
+runner-up's 166.7 s without touching the graphics card at all. Only ~4B of its 26B parameters
+are active per token, which is what buys that. It is a 15 GB download and the profile sets
+`think: false` for it, because it is a thinking model.
+
+`hf.co/<owner>/<repo>:<quant>` is an ordinary Ollama tag — `pull` fetches it from HuggingFace,
+with no manual download and no Modelfile. Until 2026-07-29 this repo's docs claimed otherwise
+and made that false claim the reason the MoE was not the default; it cost a better default for
+a day.
+
+**If 15 GB will not fit**, use `"engine": "ollama-gemma3"` for `gemma3:12b` at 8.1 GB — equally
+free of real errors, 2.3× slower, and the default until 2026-07-29. Or set `"model"` to
+anything else `ollama list` shows; see *Measured* below or `src/models.json` for what each
+choice costs you.
 
 This uses the **native** Ollama engine rather than Ollama's OpenAI-compatible `/v1`, because
 compat layers are consistently less complete than native APIs — Google's returns bodyless
@@ -166,9 +176,14 @@ OpenAI-compatible server via `OPENAI_BASE_URL`.
 > **A thinking model needs its thinking turned off, on either transport.** It returns EMPTY
 > content otherwise: deliberation fills `reasoning_content` and the token budget is gone before
 > any answer is written. On a raw llama.cpp server, start it with `--reasoning off`. On Ollama,
-> set `"think": false` in your config — the profile deliberately sends no `think` field, so a
-> thinking model uses its own default and fails. Measured 2026-07-28: the 26B-A4B MoE returned
-> `Empty content from …/api/chat` on every retry until `think: false` was set.
+> set `"think": false`. There is no global default for that field — it belongs to the engine row,
+> matched to the model that row names, because whether thinking helps is a property of the model.
+> The `ollama` row carries `think: false` because it names a thinking model; `ollama-gemma3` omits
+> it because `gemma3:12b` has nothing to switch off. Measured 2026-07-28: the 26B-A4B MoE returned
+> `Empty content from …/api/chat` on every retry until `think: false` was set. Sending it to a
+> non-thinking model is harmless (verified on gemma3:12b), but sending it to a *different*
+> thinking model picks a measurably worse mode — qwen3:8b with thinking off was 13× faster and
+> translated the placeholder.
 
 **This tool does not download or manage an engine, deliberately.** That job is ~1,000 lines of
 CUDA-build-by-compute-capability selection and platform unpacking (measured in a working
@@ -363,9 +378,9 @@ with the RAM finally at its rated 3600 MT/s. 40/40 keys in 3 requests unless not
 
 | model | size | structural | real errors | time |
 |---|---|---|---|---|
-| 26B-A4B MoE (`gemma-4-26b-a4b-qat`), GPU offload | ~15 GB | 0 | **0** | **73.8 s** |
+| **26B-A4B QAT MoE — the default**, GPU offload | ~15 GB | 0 | **0** | **73.8 s** |
 | the same MoE, genuinely CPU-only | ~15 GB | 0 | **0** | 128.8 s |
-| **gemma3:12b** — the default | 8.1 GB | 0 | **0** | 166.7 s |
+| `gemma3:12b` — the small-download option | 8.1 GB | 0 | **0** | 166.7 s |
 | Hy-MT2-7B (first-party Tencent GGUF) | 4.6 GB | 0 | 2–3 | **36.6 s** |
 | qwen3:8b | 5.2 GB | 0 | 3+ | 111.1 s |
 | translategemma:12b | 8.1 GB | **2 missing** | — | 366.2 s |
@@ -398,10 +413,19 @@ local model with zero flags of any kind, rejected only on time. Measured clean i
 requests of retry-and-split, returned 38/40 keys and exhausted every retry on two of them — a
 structural failure. Its old result does not reproduce.
 
-**Why `gemma3:12b` is still the default** despite the MoE beating it on both axes: zero real
-errors at 8.1 GB, on a card that cannot hold a ~15 GB model. Availability is not a
-recommendation. If you have the disk and the RAM, the MoE is the better engine — see
-`src/models.json` for the per-tier reasoning.
+**Why the MoE is the default** (changed 2026-07-29): it wins on both axes that matter, accuracy
+and speed, and the objections turned out not to be objections. The full tag is
+`hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL` — instruction-tuned, quantization-aware
+trained, unsloth's UD-Q4_K_XL quant, and the exact artefact these numbers were taken from.
+
+The two arguments that had kept `gemma3:12b` in place both failed on inspection. The first was
+that the MoE needed weights supplied by hand — false: one `ollama pull` fetches it, the same
+mechanism the Hy-MT2 row always described as an ordinary pull. The second was the 15 GB
+download, which is a disk cost and does not outrank a measured accuracy *and* speed win. What
+genuinely gates it is **memory** — ~15 GB across VRAM and system RAM, measured on 8 GB VRAM
+plus 32 GB system RAM. More VRAM only helps; 16 GB of system RAM with no large card is the
+untested case, and `"engine": "ollama-gemma3"` is the answer there. Note that the tier names in
+`src/models.json` are VRAM, which is not the constraint this model is bounded by.
 
 ### The cloud row (not re-measured on 2026-07-28)
 

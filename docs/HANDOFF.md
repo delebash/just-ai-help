@@ -30,17 +30,26 @@ flagged strings, not raw flag counts.
 
 | engine | structural | real errors | time |
 |---|---|---|---|
-| `gemma-4-26b-a4b-qat` MoE, GPU offload (~15 GB) | 0 | **0** | **73.8 s** (retest 74.2) |
+| **26B-A4B QAT MoE — the shipped default** since 2026-07-29, GPU offload (~15 GB) | 0 | **0** | **73.8 s** (retest 74.2) |
 | the same MoE, genuinely CPU-only | 0 | **0** | 128.8 s |
-| **gemma3:12b** — the shipped default (8.1 GB) | 0 | **0** | 166.7 s |
+| `gemma3:12b` — the small-download option (8.1 GB) | 0 | **0** | 166.7 s |
 | Hy-MT2-7B (4.6 GB) | 0 | 2–3 | **36.6 s** (retest 37.8) |
 | qwen3:8b (5.2 GB) | 0 | 3+ | 111.1 s |
 | translategemma:12b (8.1 GB) | **2 missing — FAIL** | — | 366.2 s |
 | Gemini 3.6 Flash (cloud, not re-measured) | 0 | 0 | 94 s — but 20 requests/DAY |
 
-**The flagship MoE is the most accurate thing measured, and it is faster on CPU alone than the
-default is with a GPU.** It needs `"think": false` — it is a thinking model and returns empty
-content otherwise. It is not the shipped default only because it is a ~15 GB download.
+**The flagship MoE is the most accurate thing measured AND the fastest, and it is now the
+shipped default** (`src/engines.json` row `ollama`, changed 2026-07-29). Its real tag is
+`hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL` — instruction-tuned, QAT, unsloth's
+UD-Q4_K_XL quant, and the exact artefact every number above was taken from. It needs
+`"think": false` — a thinking model returns empty content otherwise — so that row carries the
+field, while the new `ollama-gemma3` row (gemma3:12b, 8.1 GB) omits it because gemma3 has
+nothing to switch off. `think` has no global default; it belongs to the row, matched to the model.
+
+What gates the MoE is **memory, not the card**: ~15 GB across VRAM and system RAM, measured on
+8 GB VRAM + 32 GB system RAM. More VRAM only helps. 16 GB of system RAM with no large card is
+untested — that is the case `ollama-gemma3` exists for. Note `src/models.json` tiers are keyed
+by VRAM, which is not this model's binding constraint.
 
 **Hy-MT2-7B is the speed option and it costs correctness** — a reproducible Spanish `¿` miss on
 the same key across both runs, plus a hallucinated noun. Not a default.
@@ -66,20 +75,30 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
 
 ## WHAT REMAINS
 
-> ⚠️ **The Spanish output no longer exists. Checked 2026-07-29: there is no `es.json` anywhere
-> in the workspace** — not in `justwrite-app/src/renderer/src/i18n/locales/` (which holds only
-> `en.json`), not anywhere else under `E:\Dev\Web`. The 846-key run really happened, but its
-> result was never committed, and "shipping `es.json` into JustWrite" is on the USER-OWNED list
-> below, so it never landed. Items 1 and 3 both took that file as their input. **Neither is
-> doable until a fresh run produces it** — Ollama up, `gemma3:12b`, ~52 min. `en.json` has also
-> grown to **867 keys**, so a re-run is not a reproduction of the old one.
+> ✅ **The Spanish output DOES exist — corrected 2026-07-29.** A previous revision of this file
+> declared it gone and both items below blocked. That was wrong, and it was wrong in an
+> instructive way: the check searched for a file *named* `es.json`, and the artefacts are named
+> something else, inside a gitignored directory. They are:
+>
+> - `.evidence/jw-846-keys-es-after-escalate.json` — **846 leaf keys, Spanish, post-escalate.**
+>   Verified by counting leaves and reading the content.
+> - `.evidence/jw-846-keys-run.log` — the main run: gemma3:12b, `0 unchanged, 846 to translate`,
+>   56 requests, `Elapsed 3112.8s` (51.9 min — the "52 min" cited below). Its report names
+>   findings: `untranslated (8)` with all eight keys, and `endpunc (39)` with eight named before
+>   the list truncates. Those 47 are the MAIN run's findings; the "99 → 23, 63 keys → 18" figures
+>   below came from later conventions-fix and `--escalate` passes that this log does not cover.
+>
+> Two things are genuinely true from the old warning: no config was ever committed, and `en.json`
+> has grown to **867 leaf keys** (counted, not cited). So a check of the recovered 846-key file
+> against today's `en.json` will legitimately report ~21 keys missing. Pairing it with the
+> matching source means recovering that `en.json` from `justwrite-app` git history.
 
-1. **The 18 flagged keys** — `node src/review.js config.json --lang es`. First real use of the
-   review page; also tells us whether the triage UI is any good. **Blocked:** the 18 findings
-   describe a file that no longer exists (see above). The finding *names* were reported to the
-   terminal at the time and were not saved either, so re-running is the only route back.
-   Requires a config too — the repo ships only `just-ai-help.config.example.json`, and whatever
-   config drove the 846-key run was never committed.
+1. **The flagged keys** — `node src/review.js config.json --lang es`. First real use of the
+   review page; also tells us whether the triage UI is any good. **Not blocked.** `review.js`
+   and `--check-only` read files on disk and need no engine, so pointing a config at the
+   recovered file regenerates the current finding set immediately. Still to do: write the config
+   (the repo ships only `just-ai-help.config.example.json`) and decide whether to check against
+   today's 867-key `en.json` (≈21 extra `missing`) or the historical one.
 2. **The conversion sweep** — the real remaining work, and unaffected by the above.
 
    **MEASURED 2026-07-29, not cited: `npm run i18n:lint` in `justwrite-app` reports 1,430
@@ -105,9 +124,15 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
    A caveat on the number: it counts raw-text *occurrences*, not final keys. Fragments merge, and
    some hits are brand names or avatar initials ("JustWrite", "MH") that should never be
    translated. Expect the key count to land below 1,430.
-3. **`--probe` at scale** — validated on the 40-key corpus, not yet on a full catalogue.
-   **Blocked on the same re-run**, and note probe doubles it: two passes, so ~2 hours for 867
-   keys, not 52 minutes.
+3. **`--probe` at scale** — validated on the 40-key corpus, not yet on a full catalogue. **Still
+   needs engine time, and the recovered file does not help.** Two independent reasons, both read
+   from the code rather than assumed: the probe pass always translates fresh into its own
+   `<lang>.probe.json` with its own cache (`src/translate.js:242`), and the main pass skips a key
+   only when the target exists **AND** `.jah-cache.json` has an entry for its content hash
+   (`src/loop.js:320`) — that cache is gitignored and **does not exist**, so every key
+   re-translates at full price regardless. Budget two full passes. On the new default MoE that is
+   roughly 2×25 min rather than the 2×52 min this doc previously assumed on gemma3:12b, but it has
+   not been measured at catalogue scale on either model.
 4. ~~**LICENSE files**~~ — **DONE 2026-07-29, and the whole family is now MIT.** Every repo
    (`just-ai-help`, `just-llm-runner`, `justwrite-app`, `justwrite-website`, `claude-config`,
    `JustVoice`) ships an MIT `LICENSE` with matching metadata. The user's decision was explicit:
@@ -141,6 +166,20 @@ question, not authorization.
 updated in the research doc and not here, and a later session rewrote `models.json` from this
 file's stale table. When a measurement lands, update EVERY place that states it, or point the
 stale place at the fresh one in the same change.
+
+**A doc can invent a blocker, and a false blocker is more expensive than a stale fact.** This
+file spent a day telling every reader that two of its own remaining items were impossible,
+because a search for `es.json` did not match `jw-846-keys-es-after-escalate.json`. Nothing was
+lost; work was simply not attempted. When you conclude something is missing, say what you
+searched for and how — a negative result is only as good as its query, and "checked, not there"
+reads as certainty forever.
+
+**Never put a shorthand where an identifier goes.** `gemma-4-26b-a4b-qat` was a readable label
+for the flagship, and because it is not a pullable tag, a later revision explained the gap by
+inventing a requirement — "supply your own GGUF" — that nobody had tested. That false sentence
+then became the stated reason the best measured model was not the default. The real tag,
+`hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL`, pulls in one command like any other.
+If a name cannot be pasted into a command, it does not belong in a config field.
 
 **Never let two runs share one GPU.** Unload the first engine explicitly and verify VRAM is free
 (`GET /api/ps`) before starting the second. This is not tidiness: it produced a 6.4× wrong
@@ -193,3 +232,61 @@ the code never implemented**:
 The lesson generalises past this repo's own "docs go stale" note below: **a doc describing an
 intended end state is indistinguishable from one describing reality.** Each of these read as
 finished features to anyone auditing from the layer below. Read the seed data, not the table.
+
+## 2026-07-29, later — the default is now the MoE, and two false claims are gone
+
+The user asked why the flagship was not the default, and the answer this repo gave was wrong.
+
+**What was actually wrong.** `src/models.json` said the MoE was "not a public Ollama tag — supply
+your own GGUF", and that sentence was the stated reason a slower, equally-accurate model shipped
+as the default. `ollama list` settles it: the model is installed as
+`hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL`, a name Ollama only assigns to something
+**it** pulled from HuggingFace — a hand-imported GGUF carries a local name instead. One command,
+no manual download. With that gone, the only remaining objection was the 15 GB download, which is
+a disk cost and does not outrank a measured win on both accuracy and speed.
+
+**What changed.** `src/engines.json` row `ollama` now names the full MoE tag and carries
+`think: false`; a new `ollama-gemma3` row holds `gemma3:12b` with no `think` field. `think` is now
+explicitly per-row, matched to the model that row names, rather than a global that must be absent.
+`src/models.json` promotes the MoE to `8gb.recommended` with its real pull command and demotes
+gemma3:12b to the small-download alternative; the `16gb` tier inherits the same recommendation.
+README and `docs/GUIDE.md` follow, and GUIDE now leads with one pull command and a
+pick-something-else-only-if table.
+
+**Verified, not assumed** (2026-07-29, this session):
+- `think: false` against gemma3:12b returns a normal answer — so the field is safe on a
+  non-thinking model, which is what makes a shared row acceptable. Sending it to a *different*
+  thinking model is still a quality regression (qwen3:8b translated a placeholder with it).
+- The MoE at `think: false` translated `Save {count} chapters` → `Guardar {count} capítulos`:
+  correct Spanish, placeholder intact, no empty content. That is the shipped default running.
+- `npm test` — 65/65 pass after every edit.
+
+**The corpus run the MoE never had — taken 2026-07-29, and it reproduces.** The 2026-07-28
+five-run set wrote its output to a temp scratchpad that has since been cleaned, so `.evidence/`
+had sample output for gemma3, Hy-MT2, qwen3 and Gemini and **none for the flagship**. Now it
+does: `.evidence/corpus40-gemma4-moe-es.json` and `corpus40-gemma4-moe-run.log`, produced by the
+shipped default with no overrides, all models unloaded and `/api/ps` verified empty first.
+
+| | 2026-07-28 record | this run, under the shipped default |
+|---|---|---|
+| time | 73.8 s (retest 74.2) | **69.8 s**, cold model load included |
+| requests | 3 | 3 |
+| structural | 0 | 0 |
+| semantic flags | 1 (did not reproduce on retest) | 1 — `chapters.footer.aiTokens` |
+| real errors | 0 | **0** |
+
+The single flag is the documented false positive: EN `· {n} tokens` → ES `· {n} tokens`, correctly
+left alone because "tokens" is "tokens" in Spanish, and the check penalises the right answer.
+Also confirmed by reading, not tallying: 0 placeholder mismatches, 8/8 plural pipes intact, 5/5
+`JustWrite`/`Strands` occurrences preserved, the opening `¿` present on
+`characters.sweepPrompt.message` (the key Hy-MT2 misses on both its runs), and
+`chapters.ai.clearStrikesDesc` rendered without the invented noun Hy-MT2 produced there. Exit code
+1, which is correct — a run reports its findings rather than exiting 0 on one.
+
+The config was reconstructed (context "JustWrite, a desktop app for writing novels", glossary
+`JustWrite` + `Strands`) because the original was never committed, so treat 69.8 s as a
+same-instrument reproduction rather than a byte-identical repeat of the 73.8 s figure.
+
+**Also corrected here:** the claim that the 846-key Spanish output no longer existed. It does —
+see WHAT REMAINS above. Item 1 is unblocked; item 3 is not, and the reason is the missing
+`.jah-cache.json`, read out of `src/loop.js:320` rather than guessed.
