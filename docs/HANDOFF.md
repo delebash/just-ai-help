@@ -89,24 +89,69 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
 >   below came from later conventions-fix and `--escalate` passes that this log does not cover.
 >
 > Two things are genuinely true from the old warning: no config was ever committed, and `en.json`
-> has grown to **867 leaf keys** (counted, not cited). So a check of the recovered 846-key file
-> against today's `en.json` will legitimately report ~21 keys missing. Pairing it with the
-> matching source means recovering that `en.json` from `justwrite-app` git history.
+> has grown to **867 leaf keys** (counted, not cited). The matching source turned out to be
+> recoverable exactly: **`justwrite-app` commit `33dbac8` (2026-07-27) has 846 leaves**, so the
+> pair is intact and no `~21 missing` allowance is needed.
 
-1. **The flagged keys** — `node src/review.js config.json --lang es`. First real use of the
-   review page; also tells us whether the triage UI is any good. **Not blocked.** `review.js`
-   and `--check-only` read files on disk and need no engine, so pointing a config at the
-   recovered file regenerates the current finding set immediately. Still to do: write the config
-   (the repo ships only `just-ai-help.config.example.json`) and decide whether to check against
-   today's 867-key `en.json` (≈21 extra `missing`) or the historical one.
-2. **The conversion sweep** — the real remaining work, and unaffected by the above.
+1. ~~**The flagged keys**~~ — **TRIAGED 2026-07-30. The finding set is recovered and read, and
+   the result vindicates the conventions fix.** `--check-only` on the recovered pair (846-key
+   `es.json` against `en.json@33dbac8`) reports **24 findings across 19 unique keys** — near the
+   "23 findings, 18 keys" on record, the drift being check refinements since. Every one was read.
 
-   **MEASURED 2026-07-29, not cited: `npm run i18n:lint` in `justwrite-app` reports 1,430
-   warnings, 0 errors, across 69 of 81 renderer `.vue` files.** 813 `t()`/`$t()` call sites are
-   already converted. The research doc's ~1,719 was the right ballpark. Distribution is
-   long-tailed — worst are `AnalysisView` 81, `ImportView` 57, `HomeView` 56, `RichEditor` 55,
-   `RelationshipArcModal` 42; the tail runs down to single-warning files, so there is cheap
-   early progress available. The kit (613) and JustVoice (1,551) figures are still uncounted.
+   **11 are real errors, 8 are false positives**, and they separate perfectly by check:
+
+   - **`spurious-interrogative`: 10 findings, 10 real errors. A 100% hit rate.** Every one is a
+     declarative label or hint that the model turned into a question — `"Where the lie began"` →
+     `"¿Dónde comenzó la mentira?"`, `"What they're FOR in the cast."` → `"¿Para qué sirven en el
+     elenco?"`. **Two are semantic INVERSIONS, the worst class:** `chapters.header.askQuestion`
+     and `…Titled` render `"Tell me about chapter {num}"` as `"¿Qué puedo decirte sobre el
+     capítulo {num}?"` — *"What can I tell you about chapter X?"*. The speaker is flipped: the
+     user's prompt to the AI became the AI's question to the user. A structural check cannot see
+     that, and `--probe` would not either, since both passes would make the same inversion.
+     One more is ungrammatical on top: `characters.fields.depth.family.hint` opens `¿` with **no
+     closing `?`** and says `"qué costo"` where Spanish needs `"cuánto costó"`.
+   - **`endpunc`: 5 findings, 0 independent errors** — every one is a second flag on a key
+     `spurious-interrogative` already caught, the added `?` being the same defect seen from the
+     punctuation side. Useful corroboration, not new information.
+   - **`untranslated`: 9 findings, 1 real error.** The one that counts is
+     **`sidebar.nav.askTheBook`, still English: `"Ask the book"`.** The other 8 are the known
+     weakness — strings whose correct Spanish IS the English: `"No"`, `"General"`, `"Error"`,
+     `"ID"`, `"Tauri ({version})"`, `"Vue 3 + Pinia"`, `"llama3.1:8b, gpt-4o-mini, …"` and the
+     documented `"· {n} tokens"`. **So this check runs at an 8-in-9 false-positive rate on a real
+     catalogue** — it penalises the right answer, exactly as `models.json` warns, and that is now
+     a measured rate rather than an anecdote.
+
+   **What this says about the design.** The checks-as-spec layering works: the check added by
+   `17ea118` ("the ¿ rule told half a story, and the model applied it everywhere") is the one
+   catching every real defect here, while the oldest and bluntest check supplies nearly all the
+   noise. The flag list is a worklist, not a verdict — 19 keys to read, 11 worth fixing.
+   **Not fixed:** the recovered `es.json` is a gitignored evidence artifact and shipping it into
+   JustWrite is USER-OWNED, so the errors are reported, not patched.
+   **Still untested:** the review PAGE itself. This triage went through `--check-only` and reading
+   the JSON, so whether the `:4780` UI is any good remains an open question.
+2. **The conversion sweep** — the real remaining work, and unaffected by the above. **STARTED
+   2026-07-30: `justwrite-app` `b6ee9cc` (pushed) takes it 1,430 → 1,358 warnings, 69 → 54
+   files.** Full record in `justwrite-app/docs/TASKS.md`; the load-bearing findings are here.
+
+   **The size of the job is ~850 keys, not 1,430.** Of 1,430 warnings, 1,329 parse as single-line
+   raw-text nodes, and **1,154 are real copy collapsing to 852 distinct strings** — so ~300 sites
+   want an EXISTING key, not a new one. Heaviest repeats: `Done` ×14, `Cancel` ×14, `Retry` ×13,
+   `Ask the book` ×10. That puts a number on this file's old "expect it to land below 1,430"
+   caveat, and those ~300 duplicate sites are the cheapest real progress left.
+
+   **27 of the warnings were never work, and the meter was miscounting.** `ignorePattern` gained
+   `\p{S}` — 23 were glyph-only nodes (`× − ✕ ✓ ✦ ↑ ↓ ↵ ⏎ ⌘`) that the original `[\d\s\p{P}]`
+   was plainly meant to cover but missed, Unicode filing them as Symbol not Punctuation. And
+   `ignoreNodes` gained `kbd` beside the existing `code`: a `<kbd>`'s content is a key name. The
+   Settings shortcut table proved it — every description beside a `<kbd>` was already a `$t()`
+   call while the `<kbd>` was flagged, and only SOME rows were, because `⌘\` fell inside
+   `ignorePattern` while `⌘F` escaped it on one Latin letter. **Since this rule flips to `error`
+   as the real gate, a false entry in that count is a permanent false obligation.**
+
+   **MEASURED 2026-07-29, superseded by the above: 1,430 warnings across 69 of 81 renderer
+   `.vue` files**, 813 `t()`/`$t()` sites already converted; the research doc's ~1,719 was the
+   right ballpark. Worst files today: `AnalysisView` 81, `ImportView` 57, `HomeView` 56,
+   `RichEditor` 55. The kit (613) and JustVoice (1,551) figures are still uncounted.
 
    **Do not build census tooling — it exists.** `justwrite-app` already ships
    `@intlify/eslint-plugin-vue-i18n`'s `no-raw-text` as `npm run i18n:lint`, and
@@ -124,15 +169,54 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
    A caveat on the number: it counts raw-text *occurrences*, not final keys. Fragments merge, and
    some hits are brand names or avatar initials ("JustWrite", "MH") that should never be
    translated. Expect the key count to land below 1,430.
-3. **`--probe` at scale** — validated on the 40-key corpus, not yet on a full catalogue. **Still
-   needs engine time, and the recovered file does not help.** Two independent reasons, both read
-   from the code rather than assumed: the probe pass always translates fresh into its own
-   `<lang>.probe.json` with its own cache (`src/translate.js:242`), and the main pass skips a key
-   only when the target exists **AND** `.jah-cache.json` has an entry for its content hash
-   (`src/loop.js:320`) — that cache is gitignored and **does not exist**, so every key
-   re-translates at full price regardless. Budget two full passes. On the new default MoE that is
-   roughly 2×25 min rather than the 2×52 min this doc previously assumed on gemma3:12b, but it has
-   not been measured at catalogue scale on either model.
+3. ~~**`--probe` at scale**~~ — **DONE 2026-07-30, 867 keys, and it found the limitation it
+   existed to look for.** Full catalogue, two passes, 110 requests, shipped default MoE with no
+   overrides, `suspects.topN: 30`. **`Elapsed 1302.7s` — 21.7 minutes, not the ~2 hours this file
+   predicted** (that estimate assumed 2×52 min on gemma3:12b; the MoE does both passes in less
+   time than gemma3 took for one). Exit code 1, correctly. Evidence:
+   `.evidence/jw-867-probe-{es.json,es-secondpass.json,run.log,config.json}` — and the config is
+   saved this time, since its absence is what made the last run unreproducible.
+
+   **The output is 99.8% clean: 14 findings, 2 real errors.** All 14 were read.
+   - **11 `untranslated` — all 11 false positives**, strings whose correct Spanish is the English:
+     `"No"`, `"General"`, `"App"`, `"Error"`, `"ID"`, `"auto"`, `"total"`, `"Tauri ({version})"`,
+     `"Vue 3 + Pinia"`, a model-id placeholder, and the documented `"· {n} tokens"`.
+   - **1 `brackets`** — `settings.server.headlessTitle`, `"Headless access"` →
+     `"Acceso sin interfaz (headless)"`. The model added a parenthetical gloss keeping the English
+     term discoverable. Benign, arguably good practice; a reviewer's call, not a defect.
+   - **1 `startpunc` — REAL.** `characters.sweepPrompt.message`, the key that already defeated
+     Hy-MT2 on both runs and qwen3:8b: the first plural form lost its `?` entirely and the second
+     has `?` with no opening `¿`. Note the MoE got this key RIGHT in the 40-key corpus run hours
+     earlier, so this is sampling variance at temperature 0.2, not a fixed model property — the
+     catalogue's hardest key stays hard.
+   - **1 `spurious-interrogative` — REAL.** `characters.fields.capabilities.whoKnows.hint`, a
+     declarative hint rendered as a question. Same class as the 10 in item 1's older output, but
+     one instance instead of ten.
+
+   ### The finding that matters: probe caught 1 of the 2 real errors, and the miss was predictable
+
+   Cross-pass disagreement was **63/867 by wording** (the number the tool reports, via
+   `spread() > 0`) and **74/867 byte-for-byte** — the 11-key gap is keys differing only in
+   punctuation or case, which `spread` deliberately does not count as disagreement. Checked
+   against the two real errors:
+
+   | real error | passes differed? | probe flagged it? |
+   |---|---|---|
+   | `characters.sweepPrompt.message` (lost `¿`/`?`) | **yes** | **yes** |
+   | `…capabilities.whoKnows.hint` (spurious `¿`) | **no — byte-identical** | **no** |
+
+   **A systematic model bias produces the same wrong answer twice, so no amount of resampling can
+   see it.** The declarative-to-question habit is exactly that bias, which is why both passes
+   agreed perfectly on a defect. `--probe` measures *uncertainty*, and this model is not uncertain
+   here — it is confidently wrong. The `spurious-interrogative` check caught what probe could not,
+   and probe caught the punctuation slip a fixed rule found only after the fact. **That is the
+   layering argument, now measured rather than asserted: neither layer subsumes the other.**
+   Anyone tempted to treat probe as a general semantic safety net should read this row first.
+
+   Also worth noting: the fresh MoE output has 14 findings / 2 real errors where item 1's older
+   gemma3:12b-plus-escalate output had 19 flagged keys / 11 real. Suggestive, **not a controlled
+   comparison** — different model, a catalogue 21 keys larger, and the older file had been through
+   `--escalate`.
 4. ~~**LICENSE files**~~ — **DONE 2026-07-29, and the whole family is now MIT.** Every repo
    (`just-ai-help`, `just-llm-runner`, `justwrite-app`, `justwrite-website`, `claude-config`,
    `JustVoice`) ships an MIT `LICENSE` with matching metadata. The user's decision was explicit:
@@ -290,3 +374,35 @@ same-instrument reproduction rather than a byte-identical repeat of the 73.8 s f
 **Also corrected here:** the claim that the 846-key Spanish output no longer existed. It does —
 see WHAT REMAINS above. Item 1 is unblocked; item 3 is not, and the reason is the missing
 `.jah-cache.json`, read out of `src/loop.js:320` rather than guessed.
+
+## 2026-07-30, overnight — items 1 and 3 closed, item 2 started
+
+**Items 1, 3 and 4 are now done and item 2 is under way.** Detail is in WHAT REMAINS above; what
+follows is only what a reader needs to orient.
+
+- **Item 1 (triage)** — the recovered pair checks out against `justwrite-app@33dbac8` (846 leaves,
+  an exact match), 24 findings / 19 keys, **11 real errors**. `spurious-interrogative` went 10 for
+  10; `untranslated` went 1 for 9. Two of the real errors invert the speaker.
+- **Item 3 (`--probe` at scale)** — 867 keys in **21.7 min**, 14 findings, **2 real errors**, and
+  the headline result is that **probe caught one and was structurally blind to the other**, because
+  a systematic bias answers the same way twice. Neither checking layer subsumes the other, and that
+  is now measured.
+- **Item 2 (the sweep)** — `justwrite-app@b6ee9cc`, pushed: **1,430 → 1,358 warnings, 69 → 54
+  files**, 15 files to zero. The job's real size is **~850 keys, not 1,430**, and 27 of the
+  warnings were glyph/`<kbd>` nodes the lint rule should never have counted.
+
+**Two process notes worth keeping.**
+
+**The `.evidence/` config is saved now.** Every previous catalogue run was unreproducible because
+the config that drove it was never kept — that is what made item 1 look blocked for a day. The
+867-key probe run saved `jw-867-probe-config.json` beside its output. Keep doing that; an output
+without the config that produced it is an anecdote.
+
+**A flaky test was observed in `justwrite-app` and deliberately not "fixed".**
+`projectHistory.test.js > caps each domain's history independently at the limit` failed once in
+four full-suite runs of identical code, passing on clean HEAD, in isolation, and on two further
+runs. The failing run coincided with the 15 GB MoE saturating the machine. The mechanism is
+unexplained — the test is a synchronous 1005-iteration loop and `addStatusDef` is not in
+`COALESCED_ACTIONS`, so the 600 ms coalescing window should not reach it. Recorded in
+`justwrite-app/docs/TASKS.md` rather than guessed at, because a fix built on a wrong mechanism is
+worse than a known flake.
