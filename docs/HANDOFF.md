@@ -130,8 +130,9 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
    **Still untested:** the review PAGE itself. This triage went through `--check-only` and reading
    the JSON, so whether the `:4780` UI is any good remains an open question.
 2. **The conversion sweep** — the real remaining work, and unaffected by the above. **UNDER WAY
-   2026-07-30: six commits in `justwrite-app`, all pushed (`b6ee9cc` … `387477d`), taking it
-   1,430 → 1,150 warnings and 69 → 40 files. 30 of 81 renderer files are clean.** Full record in
+   2026-07-30: sixteen commits in `justwrite-app`, all pushed, taking it 1,430 → 780 warnings and
+   69 → 23 files. 58 of 81 renderer files are clean — 45% of the warnings and two thirds of the
+   files.** The per-file list of what remains, and the METHOD that is working, are both in
    `justwrite-app/docs/TASKS.md`; the load-bearing findings are here.
 
    **A new gate lives in JustWrite now:** `src/renderer/src/i18n/i18nTSlots.test.js`. `<i18n-t>`
