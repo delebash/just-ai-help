@@ -129,9 +129,21 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
    JustWrite is USER-OWNED, so the errors are reported, not patched.
    **Still untested:** the review PAGE itself. This triage went through `--check-only` and reading
    the JSON, so whether the `:4780` UI is any good remains an open question.
-2. **The conversion sweep** — the real remaining work, and unaffected by the above. **STARTED
-   2026-07-30: `justwrite-app` `b6ee9cc` (pushed) takes it 1,430 → 1,358 warnings, 69 → 54
-   files.** Full record in `justwrite-app/docs/TASKS.md`; the load-bearing findings are here.
+2. **The conversion sweep** — the real remaining work, and unaffected by the above. **UNDER WAY
+   2026-07-30: six commits in `justwrite-app`, all pushed (`b6ee9cc` … `387477d`), taking it
+   1,430 → 1,150 warnings and 69 → 40 files. 30 of 81 renderer files are clean.** Full record in
+   `justwrite-app/docs/TASKS.md`; the load-bearing findings are here.
+
+   **A new gate lives in JustWrite now:** `src/renderer/src/i18n/i18nTSlots.test.js`. `<i18n-t>`
+   had two silent failure modes — a renamed keypath renders EMPTY (missingWarn is off) and a
+   mismatched slot renders literal `{braces}` — and no existing check could see either. Verified
+   to bite on both, then restored. It matters here because the interpolated sentences are exactly
+   the strings this tool translates and re-checks.
+
+   **The dedupe is the cheapest progress**, as the measurement predicted: 66 call sites now share
+   keys, and only two keys were minted to do it. Five of the shared keys already existed and had
+   simply never been pointed at. **Six manual pluralizations** (`item{{ n === 1 ? "" : "s" }}`)
+   were removed too — English-only suffix logic that no other language follows.
 
    **The size of the job is ~850 keys, not 1,430.** Of 1,430 warnings, 1,329 parse as single-line
    raw-text nodes, and **1,154 are real copy collapsing to 852 distinct strings** — so ~300 sites
