@@ -5,9 +5,18 @@ Two functions sharing one pipe: **translate** a locale folder with a local or on
 then re-read the files to assert what was written; **author** help docs whose front-matter becomes
 locale keys, so one sentence serves the article, the surface lede and the field hint.
 
-**Zero dependencies. Node 20+, global `fetch`, nothing from npm.** There is no `npm install` step
-because there is nothing to install. Keep it that way — the whole loop was brought in-house
-precisely because a dependency owned the request body and we could not reach it.
+**Running it needs Node 24+ and nothing else.** The UI ships as a committed `review-ui/dist`
+and SQLite is built into the runtime (`node:sqlite`), so there is no install step for a *user*.
+`npm install` is for developing the UI only.
+
+**The rule is ADOPT-FIRST, not zero-dependency.** An earlier revision of this file said
+"nothing from npm" and told readers to keep it that way. That was written by a session, never
+by the user, whose standing rule is the opposite (`docs/plans/2026-07-27-v2-design-executor-plan.md:42`).
+What the 2026-07-27 incident actually established is narrower and still true: **own the
+translation request body.** The loop is ours because every candidate failed a specific measured
+test — json-autotranslate hardcodes its endpoint, Lingo.dev failed its spike, and the fork's
+self-verification was blind to the defects that mattered. That reasoning does not extend to a
+UI, and it never extended to a library that only reads.
 
 ## Commands
 

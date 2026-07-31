@@ -1,65 +1,65 @@
 # Review workspace — BUILD PROGRESS
 
-**Live status file. Update it at every phase boundary.** If a session is compacted mid-build,
-read this first, then the design at [`2026-07-31-review-workspace-design.md`](2026-07-31-review-workspace-design.md).
+**COMPLETE.** All six phases built, tested and committed on `main`, nothing pushed.
+Design: [`2026-07-31-review-workspace-design.md`](2026-07-31-review-workspace-design.md).
 
 Read branch and commit state from git, never from this file.
 
 ---
 
-## Where we are
+## Phases
 
-| phase | what | state |
+| phase | what | commit |
 |---|---|---|
-| 0 | database — `node:sqlite`, providers/connections, gitignore guard | ✅ **done** — `4a39431` |
-| 1a | `store.js` + `terms.js` | ✅ **done** — `05b01dc` |
-| 2 | `jobs.js`: progress, cancel, rejoin, proposals-only | ✅ **done** — `9de86c5` |
-| 1b | `server.js`: the whole API over HTTP | ✅ **done** — 23 tests |
-| 3 | `review-ui/` Vue app: queue, list, detail, keyboard, undo | 🔨 next |
-| 4 | second opinion wiring: Google frame, re-translate, back-translation | ⬜ (frame endpoint done) |
-| 5 | notes feeding the next run (`loop.js` prompt injection) | ⬜ (storage done) |
-| 6 | docs: GUIDE, README, CLAUDE.md, HANDOFF | ⬜ |
+| 0 | database — `node:sqlite`, providers/connections, gitignore guard | `4a39431` |
+| 1a | `store.js` (review state, undo log, proposals, runs) + `terms.js` | `05b01dc` |
+| 2 | `jobs.js` — progress, cancel, rejoin, proposals-only | `9de86c5` |
+| 1b | `server.js` — the whole API over HTTP | `b29cca5` |
+| 3 | `review-ui/` Vue 3 app + committed `dist` + staleness guard | `2abb601` |
+| 5 | per-key notes feeding the next run | `bc87719` |
+| 6 | docs — README, GUIDE, CLAUDE.md | this commit |
 
-**140 tests pass.**
+**144 tests pass.** Was 75 before this work.
 
-## Non-negotiables carried from the design
+## What was built
 
-1. **If git should see it, it is a FILE. If it is workshop state, it is the DATABASE.**
-   `<lang>.json`, `<lang>.accepted.json`, `<lang>.notes.json` and the config stay committed.
-   Deleting `.jah.db` must never break a build — there is a test.
-2. **Every engine action produces a PROPOSAL. Only a human writes the target file.**
-3. **A key never appears in anything the UI can read**, and storing one refuses unless
-   `.gitignore` covers `.jah.db`.
-4. **Every check ships with a test that hands it something broken and asserts it complains.**
-5. **Never let a run exit 0 having silently skipped keys.**
+- **Undo everything, across days.** The action log is in SQLite, so an accept made on Friday is
+  undoable on Monday. Un-accept exists; accepted findings are a visible, reversible bucket.
+- **Bulk re-translate** with progress, cancel and rejoin-after-reload. Results are **proposals** —
+  an engine never writes the catalogue.
+- **Second opinion** — the Google widget in a same-origin frame, banner cropped at 42px.
+- **Siblings**, **terminology** against the catalogue's own usage, **per-key notes** that feed the
+  next run.
+- **All target languages in one queue**, filterable.
+- Keyboard-first: `j`/`k`, `a`, `u`, `e`, `g`, `/`.
 
-## Verified facts this build rests on
+## Non-negotiables, all now enforced by tests
 
-- `characterAudit.why` was `"¿Por qué?"` for EN `"Why:"` — wrong. Google and MyMemory both say
-  `"Por qué:"`. **The user fixed it by hand at 05:43 on 2026-07-31**, so it is no longer a live
-  defect; it survives as the fixture case for the second-opinion panel.
-- On `settings.backups.dataFolderHint` the local model is RIGHT and both online engines are
-  wrong. Neither source dominates — that is why a second opinion is never auto-applied.
-- Google Translate's widget works in a minimal same-origin page; **42px of top-crop** removes its
-  banner; the parent can read the result back. Verified by the user in a browser.
-- Raw MT mangles placeholders (`{link}` → `{enlace}`), so reference output is display-only.
-- `translate.js:93-101` merges `{...base, ...cfg.profile}` — the preset/override order the
-  database reuses.
-- The key is read in exactly two places, both `process.env[profile.apiKeyEnv]`
-  (`loop.js:137`, `translate.js:107`).
+1. **If git should see it, it is a FILE; workshop state is the DATABASE.** `--check-only` runs
+   green with `.jah.db` deleted.
+2. **Every engine action is a PROPOSAL.** A job leaves the locale file byte-identical.
+3. **A key never reaches the UI**, and storing one refuses unless `.gitignore` covers `.jah.db`.
+4. **Every check has a test that hands it something broken.**
+5. **Saving one value leaves the file byte-identical except that value.**
 
-## Module map
+## Two bugs found by running it, not by tests
 
-| file | role |
-|---|---|
-| `src/db.js` | schema, providers/connections, secrets, prefs |
-| `src/store.js` | review state, action log + undo, proposals, notes |
-| `src/terms.js` | terminology-consistency check against the catalogue itself |
-| `src/jobs.js` | long-run manager: start, stream, cancel, rejoin |
-| `src/server.js` | the HTTP API |
-| `src/review.js` | CLI entry; starts the server |
-| `review-ui/` | Vue 3 + `@delebash/llm-ui`, built to a committed `dist/` |
+- An unrecognised job **scope** fell through to the flagged branch and started a 154-key run.
+  Now refused with a 400.
+- The terminology check reported **102 findings** on the real catalogue, mostly inflection
+  (`personaje`/`personajes`). Stemming plus a measured dominance threshold took it to 30 while
+  still catching the defect it exists for.
+
+## Open / not done
+
+- **Back-translation** (`POST /api/backtranslate`) is specified in the design and **not built**.
+  The second-opinion panel currently offers Google and staged proposals.
+- **`--escalate` from the UI** works through the job endpoint; the CLI flag is unchanged.
+- **No online engine is configured.** Groq/Mistral/OpenRouter rows are not added — the user has
+  no key and did not want one yet. Local engines work today.
+- The UI has been **driven against the real 2,039-key catalogue via HTTP** (154 rows, siblings,
+  frame, presets) but **not clicked through in a browser**. That is the obvious next check.
 
 ## Log
 
-- **2026-07-31** — design committed `55b292c`; phase 0 committed `4a39431` (16 tests, 91 total).
+- **2026-07-31** — design `55b292c`; phases 0–6 as above; 75 → 144 tests.

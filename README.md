@@ -16,9 +16,11 @@ Two functions, one pipeline:
 They share one repo because they share the pipe: function 2 emits keys, function 1 translates
 them.
 
-> **Zero dependencies.** Node 20+, global `fetch`, nothing from npm. It used to wrap
-> [`i18n-ai-translate`](https://github.com/taahamahdi/i18n-ai-translate) and that wrapper is
-> gone — see *Why the loop is ours* below.
+> **Node 24+ and nothing else to run it.** The review UI ships as a committed build and SQLite
+> is part of the runtime, so there is no install step for a user; `npm install` is only for
+> developing the UI. The translation pipeline itself has no runtime dependencies — it used to
+> wrap [`i18n-ai-translate`](https://github.com/taahamahdi/i18n-ai-translate) and that wrapper
+> is gone, for reasons measured rather than assumed. See *Why the loop is ours* below.
 
 ## Three layers
 
@@ -27,7 +29,7 @@ them.
 | 0. **Author** | `src/extract.js` | docs front-matter (`lede:` / `hints:`) → locale keys, so one sentence serves the article, the lede and the hint |
 | 1. **Translate** | `src/loop.js` | the batch loop — shielding, batching, retry, cache, two transports. Commodity, and ours anyway, for the reason below |
 | 2. **Verify** | `src/checks.js` + `src/suspects.js` | the checks (form) and `--probe` (meaning). **The differentiator** — nothing else does content QA on what a translator wrote |
-| 3. **Review** | `src/review.js` | triage: one local page, flagged rows first, edit, save, re-check |
+| 3. **Review** | `src/review.js` + `src/server.js` + `review-ui/` | the workspace: queue, second opinion, re-translate, undo, notes — all languages at once |
 
 ```bash
 node src/translate.js config.json                    # translate what changed, then check
@@ -38,8 +40,9 @@ node src/translate.js config.json --escalate <prof>   # re-run ONLY the flagged 
 node src/translate.js config.json --accept <key,key>  # record findings as reviewed-and-correct
 node src/extract.js   config.json                     # docs front-matter -> locale keys
 node src/extract.js   config.json --check             # CI: fail if those keys are stale
-node src/review.js    config.json --lang es           # the review page
-npm test                                               # node --test, 75 tests, no deps
+node src/review.js    config.json                     # the review workspace at :4780
+npm test                                               # node --test, 144 tests
+npm run build:ui                                       # rebuild the UI (developers only)
 ```
 
 > **Just want to use it?** [`docs/GUIDE.md`](docs/GUIDE.md) is the short version — which model
@@ -120,11 +123,11 @@ es: "¿Eliminar {n} autoguardados? | ¿Eliminar {n} autoguardados?"
 `startpunc` is the one that shows why prompting is not enough. Told the Spanish rule
 explicitly in the system prompt, qwen3:8b still missed the opening `¿` on **5 of 5** questions
 — and so did lingo.dev's run. Every check has a test that hands it a deliberately broken
-string and asserts it complains (`npm test`, `node --test`, zero dependencies), because a
+string and asserts it complains (`npm test`, `node --test`), because a
 check that has never been seen to fail is indistinguishable from one that cannot.
 
 Every finding is `{ key, code, detail }` — one shape, because this list is not only the CI
-gate, it is the feed the review page triages on.
+gate, it is the feed the review workspace triages on.
 
 ## Quick start
 
@@ -192,19 +195,46 @@ implementation), to save you one Ollama install.
 
 ## Fixing what it gets wrong
 
-### The review page
+### The review workspace
 
 ```bash
-node src/review.js just-ai-help.config.json --lang es    # http://localhost:4780
+node src/review.js just-ai-help.config.json    # http://localhost:4780
 ```
 
-One `node:http` server, one HTML page, no framework, no build, no dependencies, no account
-and no database — **the JSON files are the state**, the same ones git already tracks.
-Flagged rows are pinned to the top with their reason as a chip; edit in place, it saves on
-blur, re-runs the checks for that key and updates the counts. Saving one value leaves the
-file byte-identical except that value (the nested structure is rebuilt from the *source*
-file's shape, so key order never churns) — a one-word fix produces a one-line diff, which is
-what makes reviewing a reviewer's work possible. There is a test for exactly that.
+A three-pane workspace: a queue of buckets with live counts, a key list, and a detail panel
+holding everything needed to judge one translation. Vue 3 on `@delebash/llm-ui`, the same
+component kit the other apps use, served from a committed build — so this needs no install.
+
+**What it does that the old page could not:**
+
+- **Un-accept.** Approving a finding was one-way, and accepted keys then vanished entirely, so
+  a decision could never be revisited. They are now a visible bucket, reversible in one click.
+- **Undo anything**, across days. The action log is in SQLite, not browser memory, so an accept
+  made on Friday is still undoable on Monday.
+- **Re-translate from the page** — one key or a whole scope, with progress, cancel, and rejoin
+  after a reload. Results arrive as **proposals**: an engine never writes the catalogue, a
+  human does. That is what makes a 52-minute job safe to cancel.
+- **A second opinion.** Google Translate embedded in a same-origin frame with its banner
+  cropped, beside the local model's second pass. Neither is treated as authoritative, because
+  neither is: on `characterAudit.why` the local model was wrong and Google right; on
+  `settings.backups.dataFolderHint` the reverse.
+- **Siblings** from the same namespace — how `characterAudit.why` was actually proven a defect,
+  by seeing its neighbour render the same label-with-colon pattern correctly.
+- **Terminology** against the catalogue's own usage, and a **note** per key that is sent with
+  that key on the next run, so a fix found once stops recurring.
+- **Every target language in one queue**, filterable to one.
+- **Keyboard first** — `j`/`k` move, `a` accepts, `u` undoes, `e` edits, `g` shows Google,
+  `/` searches.
+
+Unchanged and still load-bearing: saving one value leaves the file byte-identical except that
+value — the nesting is rebuilt from the *source* file's shape, so key order never churns. A
+one-word fix produces a one-line diff, which is what makes reviewing a reviewer's work
+possible. There is a test for exactly that.
+
+**What lives where.** The locale JSON, acceptances and notes stay committed files — the app
+loads them and `--check-only` reads them, so deleting the workspace database must never break
+a build, and there is a test for that too. `.jah.db` (gitignored) holds review progress, undo
+history, proposals, run history and engine connections.
 
 ### Some findings are correct — `--accept`
 

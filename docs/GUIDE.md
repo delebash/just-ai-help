@@ -124,7 +124,7 @@ Edit the copy:
 ```bash
 node src/translate.js config.json                  # 1. translate what changed, then check
 node src/translate.js config.json --probe          # 2. (optional) second opinion on meaning
-node src/review.js    config.json --lang es        # 3. fix what got flagged
+node src/review.js    config.json                  # 3. fix what got flagged
 node src/translate.js config.json --accept <key>   # 3b. mark a flag as correct, not a defect
 node src/translate.js config.json --check-only     # 4. in CI: verify, no engine needed
 ```
@@ -152,9 +152,38 @@ model that is confidently wrong twice looks clean. On that same run, "Everything
 lives here" came back as "Todo JustWrite salva vidas aquí" — "saves lives" — and the second pass
 made the same misreading in different words. No check catches that. Read the file.
 
-**3 — Review.** Opens `http://localhost:4780`. Flagged rows are pinned to the top with the
-reason attached; edit in the box, it saves when you click away and re-checks that key. The
-JSON files are the only state — no database, no account. You can also just edit the JSON.
+**3 — Review.** Opens `http://localhost:4780` — a three-pane workspace, and where most of the
+work happens.
+
+The left pane is the queue: buckets by defect class, with counts, plus a language filter. Every
+target language appears together by default; pick one to narrow. The middle is the key list.
+The right is where you judge a translation, and it holds everything you would otherwise have
+left the page for:
+
+- **why it is flagged**, in plain English rather than a check code;
+- the **English** with `{placeholders}` marked, so what must survive is obvious;
+- the editable translation — saves when you click away;
+- a **second opinion**: Google Translate embedded beside your own output. Neither is treated as
+  authoritative because neither is — on `characterAudit.why` ("Why:") the local model wrote
+  "¿Por qué?" and Google wrote the correct "Por qué:"; on the data-folder hint the local model
+  was right and Google wrong;
+- **siblings** from the same namespace — often the fastest proof that something is off, since a
+  neighbour usually shows how the pattern is meant to look;
+- a **note** for the key, which is sent with it on the next translation, so a fix you work out
+  once does not have to be worked out again.
+
+**Everything is undoable**, including an approval — press `u`, or the Undo button. Accepted
+findings stay visible in their own bucket and can be reversed at any time.
+
+**Re-translate from the toolbar** — one key, everything flagged, or the whole catalogue, with
+progress and a cancel button. Results arrive as *proposals* shown beside the current value; an
+engine never writes your catalogue, you do. So cancelling a fifty-minute run costs nothing.
+
+**Keyboard:** `j`/`k` move · `a` accept · `u` undo · `e` edit · `g` Google · `/` search.
+
+Your locale JSON, acceptances and notes stay ordinary committed files — you can still just edit
+the JSON. Review progress, undo history and engine connections live in `.jah.db`, which is
+gitignored; deleting it loses your place, never your work.
 
 **3b — Some flags are not defects.** In Spanish the correct translation of "No" is "No", and
 `untranslated` will say so every single run. Left alone, that means a *perfect* catalogue can
