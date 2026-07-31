@@ -7,7 +7,7 @@ for why it is built this way.
 > `justwrite-app/docs/plans/2026-07-26-i18n-single-source-research.md`, and the sections from
 > "The clean re-measurement — 2026-07-28" onward (line ~785) supersede everything measured
 > before them. **This file was itself wrong for a day** because a session updated that document
-> and not this one, and the next session then "corrected" `server/models.json` from the stale
+> and not this one, and the next session then "corrected" `docs/models.json` from the stale
 > summary here — promoting a demoted model and calling the best model untested. If those two
 > documents ever disagree, the research record wins and this file is the thing to fix.
 
@@ -48,7 +48,7 @@ nothing to switch off. `think` has no global default; it belongs to the row, mat
 
 What gates the MoE is **memory, not the card**: ~15 GB across VRAM and system RAM, measured on
 8 GB VRAM + 32 GB system RAM. More VRAM only helps. 16 GB of system RAM with no large card is
-untested — that is the case `ollama-gemma3` exists for. Note `server/models.json` tiers are keyed
+untested — that is the case `ollama-gemma3` exists for. Note `docs/models.json` tiers are keyed
 by VRAM, which is not this model's binding constraint.
 
 **Hy-MT2-7B is the speed option and it costs correctness** — a reproducible Spanish `¿` miss on
@@ -346,7 +346,7 @@ would have produced exactly the meaningless all-clear the guard exists to refuse
 cannot drift. `npm test` became plain `node --test` (the quoted glob needs Node 21+ while the
 repo declares Node 20+). `server/engines.json` lost its false `_legacy` note and four dead fields
 (grep-verified unused). Then, after the user caught the model-table errors described at the top
-of this file, `server/models.json` and the README's *Measured* section were rewritten from the
+of this file, `docs/models.json` and the README's *Measured* section were rewritten from the
 research record, and `docs/GUIDE.md` was added as the short user-facing guide.
 
 Then **every `.mjs` became `.js`**. `package.json` already declared `"type": "module"`, so the
@@ -383,7 +383,7 @@ finished features to anyone auditing from the layer below. Read the seed data, n
 
 The user asked why the flagship was not the default, and the answer this repo gave was wrong.
 
-**What was actually wrong.** `server/models.json` said the MoE was "not a public Ollama tag — supply
+**What was actually wrong.** `docs/models.json` said the MoE was "not a public Ollama tag — supply
 your own GGUF", and that sentence was the stated reason a slower, equally-accurate model shipped
 as the default. `ollama list` settles it: the model is installed as
 `hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL`, a name Ollama only assigns to something
@@ -394,7 +394,7 @@ a disk cost and does not outrank a measured win on both accuracy and speed.
 **What changed.** `server/engines.json` row `ollama` now names the full MoE tag and carries
 `think: false`; a new `ollama-gemma3` row holds `gemma3:12b` with no `think` field. `think` is now
 explicitly per-row, matched to the model that row names, rather than a global that must be absent.
-`server/models.json` promotes the MoE to `8gb.recommended` with its real pull command and demotes
+`docs/models.json` promotes the MoE to `8gb.recommended` with its real pull command and demotes
 gemma3:12b to the small-download alternative; the `16gb` tier inherits the same recommendation.
 README and `docs/GUIDE.md` follow, and GUIDE now leads with one pull command and a
 pick-something-else-only-if table.

@@ -43,7 +43,7 @@ npm run build:ui                                   # rebuild the UI (developers 
 - **A gate that cannot go green is not a gate.** Some findings are correct output — Spanish for "No" is "No" — so without a way to clear them a PERFECT catalogue still fails `--check-only`, and people stop reading it. `server/accepted.js` records a reviewer verdict in `<lang>.accepted.json`, hashed over (key, code, source, target) so it EXPIRES the moment either string changes. Never a per-key exemption, and the count is always printed. Do NOT "fix" this class of noise with a hand-written list of words that are identical in the target language — `conventions.json` says why, about itself.
 - **Never let a run exit 0 having silently skipped keys.** That bug is the reason this project exists. A key that exhausts every retry is left untranslated, reported by name, and the exit code is non-zero.
 - **Every check must BITE.** A check ships with a test that hands it a deliberately broken string and asserts it complains; one that has never been seen to fail is indistinguishable from one that cannot.
-- **Model claims need a measurement, and measurements go stale.** `server/models.json` marks every row `measured` or `available` and says on what hardware. A timing taken while another engine held VRAM is not a measurement.
+- **Model claims need a measurement, and measurements go stale.** `docs/models.json` marks every row `measured` or `available` and says on what hardware. A timing taken while another engine held VRAM is not a measurement.
 
 ## Layout
 
@@ -71,7 +71,7 @@ needs no install, because `client/dist` is committed.
 | Current state, what is open, and which record wins | `docs/HANDOFF.md` — **read this first** |
 | Using the tool: which model for your machine, pull commands, the workflow | `docs/GUIDE.md` |
 | Why every piece is built this way, with the measured tables | `README.md` |
-| Which model to run and what it costs you | `server/models.json` |
+| Which model to run and what it costs you | `docs/models.json` |
 | The evidence base for every model claim | `../justwrite-app/docs/plans/2026-07-26-i18n-single-source-research.md` — the sections from "The clean re-measurement — 2026-07-28" onward supersede anything older, including this repo's own docs |
 
 Read branch and working-tree state from git, never from a doc.

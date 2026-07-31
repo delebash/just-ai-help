@@ -61,7 +61,7 @@ reproducibly dropped the Spanish opening `¿` and once invented a word that was 
 source. It is a fine choice *if* you plan to review with `--probe` and the review page; it is
 not the choice if you want to ship the output unread.
 
-Full numbers and the reasoning: `server/models.json`.
+Full numbers and the reasoning: `docs/models.json`.
 
 ### Or use an online model
 

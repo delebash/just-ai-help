@@ -167,7 +167,7 @@ a day.
 
 **If 15 GB will not fit**, use `"engine": "ollama-gemma3"` for `gemma3:12b` at 8.1 GB — equally
 free of real errors, 2.3× slower, and the default until 2026-07-29. Or set `"model"` to
-anything else `ollama list` shows; see *Measured* below or `server/models.json` for what each
+anything else `ollama list` shows; see *Measured* below or `docs/models.json` for what each
 choice costs you.
 
 This uses the **native** Ollama engine rather than Ollama's OpenAI-compatible `/v1`, because
@@ -575,7 +575,7 @@ download, which is a disk cost and does not outrank a measured accuracy *and* sp
 genuinely gates it is **memory** — ~15 GB across VRAM and system RAM, measured on 8 GB VRAM
 plus 32 GB system RAM. More VRAM only helps; 16 GB of system RAM with no large card is the
 untested case, and `"engine": "ollama-gemma3"` is the answer there. Note that the tier names in
-`server/models.json` are VRAM, which is not the constraint this model is bounded by.
+`docs/models.json` are VRAM, which is not the constraint this model is bounded by.
 
 ### The cloud row (not re-measured on 2026-07-28)
 
