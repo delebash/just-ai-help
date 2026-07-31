@@ -13,18 +13,48 @@ several names, and "which of these do I edit?" had no written answer.
 **One per app whose strings you are translating.** It says where the strings live, which
 languages, your glossary and your product context.
 
+**You do not write it by hand. Point the tool at your source file and it writes it:**
+
+```bash
+node <just-ai-help>/server/init.js  your-app/src/i18n/locales/en.json
+```
+
+That is the whole setup. It finds your project root, creates `your-app/just-ai-help/`, and
+writes a config it derived from the strings themselves:
+
+```json
+{
+  "source": "../src/i18n/locales/en.json",
+  "targets": ["es"],
+  "context": "",
+  "glossary": []
+}
+```
+
 | | |
 |---|---|
-| lives | **in the app being translated**, in a `just-ai-help/` folder at its root |
+| lives | **in the app being translated**, in `just-ai-help/` at its root |
 | named | `config.json` — any name works, you pass the path |
 | read by | `server/translate.js`, `server/extract.js`, `server/server.js` |
 | committed | **yes** — a run without the config that produced it is an anecdote |
-| template | **[`config.example.json`](config.example.json)** — copy it, it is annotated |
+| written by | `server/init.js`. **There is no template to copy** |
 
-```bash
-mkdir path/to/your-app/just-ai-help
-cp docs/config.example.json  path/to/your-app/just-ai-help/config.json
-```
+**`source` names the FILE, not the folder.** Its directory is the locale folder and its filename
+is the source language, so one field replaces three and nothing can disagree with anything else.
+Point init at `es.json` and Spanish becomes the source, with the other locale files as targets.
+
+What init cannot know is **`context`** — one sentence about your app — and it says so rather
+than leaving a silent empty field. It also proposes glossary candidates from recurring
+capitalised words and writes **none** of them, because that field is the most dangerous one in
+the file (see §1 of the glossary note below).
+
+> There used to be a `docs/config.example.json` you copied by hand. That is the `.env.example`
+> pattern used where it does not fit: `.env.example` lives in the *same* repo as the `.env` it
+> becomes, and exists because `.env` is gitignored. Neither was true here — you were copying a
+> file out of the tool's repo into a different project, then fixing a relative path the example
+> itself had wrong. Tools that configure a *different* directory generate the file
+> (`eslint --init`, `tsc --init`), and a generator can read your strings, which a template never
+> could.
 
 **One folder is the whole footprint.** Everything the tool owns in a host app lives there, and
 deleting it leaves the app building and running in every language it already has — you lose only
@@ -38,10 +68,6 @@ your-app/
   src/…/i18n/locales/
     en.json  es.json  fr.json                                  ← app assets, nothing else
 ```
-
-The example is not reproduced here on purpose. A second copy of it in this file is a second
-thing to keep in step, and that is exactly the failure this page was written about — the
-example's own engine list had already drifted, naming five engines when eight ship.
 
 **Four fields.** `locales`, `targets`, `context`, `glossary`. Everything else is either read
 from your `en.json` or lives in the review workspace:

@@ -8,6 +8,7 @@
     "just-ai-help": "./server/translate.js"
   },
   "scripts": {
+    "init": "node server/init.js",
     "translate": "node server/translate.js",
     "extract": "node server/extract.js",
     "review": "node server/review.js",

@@ -62,9 +62,9 @@ test("the older `localesDir` key still works — upgrading must not invalidate a
 	assert.equal(projectPaths(configPath, cfg).localesDir, resolve(locales));
 });
 
-test("a config with no locales key fails with a message that names the problem", () => {
+test("a config naming no source file fails with a message that names the problem", () => {
 	const { root } = project();
-	assert.throws(() => projectPaths(join(root, "config.json"), { targets: ["es"] }), /has no "locales"/);
+	assert.throws(() => projectPaths(join(root, "config.json"), { targets: ["es"] }), /has no "source"/);
 });
 
 test("sidecars default beside the config, so locales/ holds app assets only", () => {

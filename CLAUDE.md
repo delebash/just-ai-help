@@ -21,6 +21,7 @@ UI, and it never extended to a library that only reads.
 ## Commands
 
 ```bash
+node server/init.js      path/to/your-app/en.json     # once per app: derives and writes the config
 node server/translate.js config.json                 # translate what changed, then check
 node server/translate.js config.json --check-only    # check files on disk, no engine. THE CI gate.
 node server/translate.js config.json --probe         # translate twice, flag where the passes disagree
@@ -28,7 +29,7 @@ node server/translate.js config.json --escalate <profile>   # re-do ONLY flagged
 node server/translate.js config.json --accept <key,key>     # record findings as reviewed-correct
 node server/extract.js   config.json [--check]       # docs front-matter -> locale keys
 node server/review.js    config.json                  # the review workspace at :4780
-npm test                                           # node --test, 181 tests
+npm test                                           # node --test, 195 tests
 npm run build:ui                                   # rebuild the UI (developers only)
 ```
 

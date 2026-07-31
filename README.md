@@ -135,10 +135,10 @@ gate, it is the feed the review workspace triages on.
 ## Quick start
 
 ```bash
-mkdir your-app/just-ai-help                            # one folder, the whole footprint
-cp docs/config.example.json your-app/just-ai-help/config.json   # then edit it
+node server/init.js your-app/src/i18n/locales/en.json   # writes your-app/just-ai-help/config.json
+#   then fill in "context", and "targets" if the app has no other locale files yet
 export GEMINI_API_KEY=...            # free tier, no card: aistudio.google.com
-npm run translate
+node server/translate.js your-app/just-ai-help/config.json
 ```
 
 There is no `npm install` step — there is nothing to install.

@@ -18,7 +18,7 @@ it does; this page just tells you what to run.
 node --version      # v24+
 git clone <this repo>
 cd just-ai-help
-npm test            # 181 tests, should all pass
+npm test            # 195 tests, should all pass
 ```
 
 ---
@@ -85,33 +85,42 @@ local is free, private, and good enough — that is the whole point of the measu
 
 ## 3. Configure it
 
+**Point it at your source file. It writes the config.**
+
 ```bash
-mkdir your-app/just-ai-help
-cp docs/config.example.json your-app/just-ai-help/config.json
+node <just-ai-help>/server/init.js  your-app/src/i18n/locales/en.json
 ```
 
-The folder is the tool's whole footprint in your app. Edit the copy — four fields:
+It reads that file, finds your project root, and creates `your-app/just-ai-help/config.json`:
 
 ```json
 {
-  "locales": "../src/i18n/locales",
+  "source": "../src/i18n/locales/en.json",
   "targets": ["es"],
   "context": "a desktop app for managing recipes",
   "glossary": ["Acme", "Smart Pantry"]
 }
 ```
 
-- **`locales`** — where `en.json` lives, relative to **this file**. Its folder is the locale
-  folder and its filename is the source language, so neither needs stating.
-- **`targets`** — the languages to produce. The only one that cannot be worked out for you: a
-  language you do not have yet has no file to read.
+It also prints the placeholder syntax and plural separator it found in your strings — those are
+read on every run and never stored — so you know it understood your catalogue *before* spending
+an hour of engine time discovering it did not.
+
+Four fields, and init fills in two of them:
+
+- **`source`** — the file you pointed at, relative to the config. Its folder is the locale folder
+  and its filename is the source language, so one field says everything and nothing can disagree
+  with it. Point init at `es.json` and Spanish is the source.
+- **`targets`** — filled in from the locale files already beside your source. A language you do
+  not have yet has no file to read, so add it here.
 - **`context`** — one sentence about your app, sent with **every** request. UI strings are
   short and ambiguous — "Beat" is a story beat, a musical beat, or to strike — and this is what
   makes the model choose. It cannot disambiguate one particular string; a per-key note does
   that. Changing it invalidates the cache, because it changes every prompt.
-- **`glossary`** — brand names and identifiers that must survive untouched. **Only for terms
-  that must never be translated *anywhere*** — see the troubleshooting note at the end, because
-  getting this wrong is measured at 48 correct translations turned into findings.
+- **`glossary`** — brand names and identifiers that must survive untouched. init PROPOSES
+  candidates and writes none of them. **Only add a term that must never be translated
+  *anywhere*** — see the troubleshooting note at the end, because getting this wrong is measured
+  at 48 correct translations turned into findings.
 
 **Run it from anywhere.** Every path resolves against the config file, not your shell:
 
@@ -136,6 +145,7 @@ The older key names (`localesDir`, `sourceLanguage`, `glossary.doNotTranslate`) 
 ## 4. The workflow
 
 ```bash
+node server/init.js      path/to/en.json               # 0. once per app: writes the config
 node server/translate.js config.json                  # 1. translate what changed, then check
 node server/translate.js config.json --probe          # 2. (optional) second opinion on meaning
 node server/review.js    config.json                  # 3. fix what got flagged

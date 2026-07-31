@@ -36,25 +36,43 @@
 // place is found and nothing has to move on an upgrade.
 
 import { existsSync, readdirSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 
 export const CACHE_FILE = ".jah-cache.json";
 
 /**
  * Everything derived from one config file path.
  *
- * `localesDir` accepts the new `locales` key and the older `localesDir`, so an existing config
- * is not invalidated by the rename.
+ * `source` names the source FILE ("../src/i18n/locales/en.json"). Its folder is the locale
+ * folder and its basename is the source language, so that single field replaces the folder +
+ * sourceLanguage pair. Older folder-shaped configs are still read, so nothing is invalidated.
  */
 export function projectPaths(configPath, cfg) {
 	const configDir = resolve(dirname(resolve(configPath)));
 
-	const rel = cfg.locales ?? cfg.localesDir;
-	if (!rel) throw new Error(`config at ${configPath} has no "locales" — it must say where en.json lives`);
-	const localesDir = isAbsolute(rel) ? rel : resolve(configDir, rel);
+	// `source` names the SOURCE FILE, not its folder — you point the tool at en.json, so that is
+	// what gets recorded. The folder is its dirname and the source language is its basename, so
+	// one field replaces the three (`localesDir` + `sourceLanguage`, or `locales` + the same)
+	// that a folder-shaped config needed. Nothing has to agree with anything else, because
+	// there is only one fact.
+	let localesDir;
+	let sourceLanguage;
+	let sourceFile;
 
-	const sourceLanguage = cfg.sourceLanguage ?? "en";
-	const sourceFile = join(localesDir, `${sourceLanguage}.json`);
+	if (cfg.source) {
+		sourceFile = isAbsolute(cfg.source) ? cfg.source : resolve(configDir, cfg.source);
+		localesDir = dirname(sourceFile);
+		sourceLanguage = basename(sourceFile, ".json");
+	} else {
+		// Older folder-shaped configs still work, so upgrading the tool invalidates nothing.
+		const rel = cfg.locales ?? cfg.localesDir;
+		if (!rel) {
+			throw new Error(`config at ${configPath} has no "source" — it must name your en.json`);
+		}
+		localesDir = isAbsolute(rel) ? rel : resolve(configDir, rel);
+		sourceLanguage = cfg.sourceLanguage ?? "en";
+		sourceFile = join(localesDir, `${sourceLanguage}.json`);
+	}
 
 	// Review artefacts sit beside the config. If a project already keeps them in localesDir —
 	// which is where every version before 2026-07-31 put them — that location wins, so
