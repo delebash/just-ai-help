@@ -1,17 +1,8 @@
 {
-  "_why": "Per-language typographic conventions the TARGET requires regardless of what the source did. English has no opening question mark, so a translator that mirrors the source's punctuation is wrong in Spanish and nothing structural notices: the placeholders are intact, the pipes are intact, the words are right. Measured 2026-07-27: qwen3:8b missed the opening ¿ on 5 of 5 questions, and lingo.dev's run missed 5 of 5 too. Two uses, one table — `promptLine` tells the model, `pairedPunct` checks whether it listened.",
-
-  "_shipped": "SPANISH ONLY, deliberately. Other languages have their own rules (French's spaced punctuation, German's quotation marks, CJK full-width forms) and writing them from memory is exactly how a confident wrong rule ends up applied to every future translation. A language is added when someone who knows it says what the rule is.",
-
-  "_schema": {
-    "pairedPunct": "[[opener, closer], …]. A sentence in the target ending in `closer` must contain `opener`. Checked by the endpunc/startpunc check.",
-    "promptLine": "one clause, spliced into the system prompt's rule list."
-  },
+  "_doc": "Data only. Why this file exists, the 56-spurious-¿ incident that shaped the Spanish rule, and what you need before adding a language: docs/language-rules.md",
 
   "es": {
     "pairedPunct": [["¿", "?"], ["¡", "!"]],
     "promptLine": "Spanish punctuation is paired: a sentence that IS a question must open with ¿ and close with ?, and one that IS an exclamation must open with ¡ and close with !. Apply this ONLY when the English is itself a question or exclamation — most UI strings are labels, titles, buttons or statements, and those stay declarative. Never turn a statement into a question"
-  },
-
-  "_promptline_history": "The first version of the es promptLine said a question 'must OPEN with ¿ … including when the sentence begins mid-string' and stopped there. Measured on the full 846-key catalogue 2026-07-27: it produced 72 ¿ against 16 real questions — 56 SPURIOUS, turning the button 'Try tutorial project' into '¿Probar proyecto de tutorial?' and the card title 'Statuses' into '¿Estados?'. Missed openings were 0/16, so the rule worked and then kept working where it should have stopped. The 40-key corpus never caught it: too few imperative labels. The lesson is in the wording now — a convention rule must say when NOT to apply, because a model told half a rule applies it everywhere."
+  }
 }

@@ -1,21 +1,28 @@
 {
   "localesDir": "src/i18n/locales",
   "sourceLanguage": "en",
-  "targets": ["es"],
-
-  "placeholder": { "prefix": "{", "suffix": "}" },
+  "targets": [
+    "es"
+  ],
+  "placeholder": {
+    "prefix": "{",
+    "suffix": "}"
+  },
   "pluralSeparator": "|",
-
   "context": "a desktop app for managing recipes",
   "glossary": {
     "_why": "Brand names AND technical identifiers. Both get shielded from the model, and both stop `untranslated` flagging a string that correctly came back unchanged — on a real catalogue, listing the tech terms took that check from 11 findings to 7 with no code change.",
-    "doNotTranslate": ["Acme", "Smart Pantry", "PDF", "EPUB", "JSON", "tokens"]
+    "doNotTranslate": [
+      "Acme",
+      "Smart Pantry",
+      "PDF",
+      "EPUB",
+      "JSON",
+      "tokens"
+    ]
   },
-
   "engine": "ollama",
-
-  "_engines": "rows in src/engines.json: \"ollama\" = local, the default 26B-A4B QAT MoE (~15 GB, most accurate and fastest measured, already set think:false for you) · \"ollama-gemma3\" = local, gemma3:12b (8.1 GB, equally accurate, 2.3x slower) · \"gemini-free\" = online smoke test only, 20 requests/day · \"openai\" = online, paid · \"local-openai-compatible\" = your own llama-server / LM Studio / vLLM. Switching engine is safer than overriding model: each row already carries the right settings for the model it names.",
-
+  "_engines": "Pick a row from server/config/engines.json — that file OWNS the list, and every field in it exists because of a measured failure. Do not copy engine names here; they change. Local rows need no key. Switching `engine` is safer than overriding `model`, because each row already carries the right settings for the model it names (notably `think`, which a thinking model needs or it returns empty content). The review workspace shows the same list with a key/no-key status beside each.",
   "_optional": {
     "model": "override the engine profile's model — required for a local server, whose model id is whatever YOU serve. Must be a pullable tag, e.g. hf.co/tencent/Hy-MT2-7B-GGUF:Q4_K_M, not a shorthand.",
     "url": "override the engine profile's base URL",

@@ -61,18 +61,21 @@ reproducibly dropped the Spanish opening `¿` and once invented a word that was 
 source. It is a fine choice *if* you plan to review with `--probe` and the review page; it is
 not the choice if you want to ship the output unread.
 
-Full numbers and the reasoning: `docs/models.json`.
+Full numbers and the reasoning: [`models.md`](models.md).
 
 ### Or use an online model
 
-```bash
-export GEMINI_API_KEY=...        # free, no card: aistudio.google.com
-```
+Pick a row from **`server/config/engines.json`** — that file is the list, and each row carries
+its own note saying what it costs and whether it has ever been measured. Set `"engine"` to the
+row name and export the key it asks for.
 
-Set `"engine": "gemini-free"` in your config. **Use this to prove your setup works, not to
-translate a real catalogue** — the free tier allows 20 requests per day per model, and one
-846-key catalogue is about 36 requests. For real online use, set `"engine": "openai"` (or any
-OpenAI-compatible provider) with a paid key.
+The rows are not enumerated here on purpose: a copy of that list in prose goes stale, and this
+page's copy already had, naming five engines when eight shipped. The review workspace shows the
+same list with a key/no-key status beside each row.
+
+**One row is worth calling out**, because it looks usable and is not: `gemini-free` allows 20
+requests per day per model — measured — and a 2,000-key set of strings is over a hundred
+requests. It proves a setup works; it cannot translate anything real.
 
 **When online is the right call:** you have no usable GPU, you need it done in minutes rather
 than an hour, or you are translating into a language your local model handles badly. Otherwise
@@ -83,7 +86,7 @@ local is free, private, and good enough — that is the whole point of the measu
 ## 3. Configure it
 
 ```bash
-cp just-ai-help.config.example.json just-ai-help.config.json
+cp docs/config.example.json just-ai-help.config.json
 ```
 
 Edit the copy:
@@ -109,9 +112,10 @@ Edit the copy:
 - **`context`** — one sentence about your app. It goes in the prompt and genuinely changes
   word choice.
 - **`glossary.doNotTranslate`** — brand names and terms that must survive untouched.
-- **`engine`** — which row of `server/config/engines.json` to use. `"ollama"` is local with the default
-  26B MoE; `"ollama-gemma3"` is local with the smaller `gemma3:12b`; `"gemini-free"` and
-  `"openai"` are online. Each row already carries the right settings for the model it names, so
+- **`engine`** — which row of `server/config/engines.json` to use. **That file is the list**; it
+  is not repeated here, because a copy of it in prose is a copy that goes stale, and this one
+  already had. Local rows need no key; the review workspace shows every row with a key/no-key
+  status beside it. Each row already carries the right settings for the model it names, so
   switching model by switching *engine* is the option that cannot go wrong.
 - **`model`** — overrides the engine row's model, e.g. `"model":
   "hf.co/tencent/Hy-MT2-7B-GGUF:Q4_K_M"`. If the model you name is a *thinking* model, add

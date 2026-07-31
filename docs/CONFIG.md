@@ -19,20 +19,15 @@ languages, your glossary and your product context.
 | named | `just-ai-help.config.json` by convention — any name works, you pass the path |
 | read by | `server/translate.js`, `server/extract.js`, `server/server.js` |
 | committed | **yes** — a run without the config that produced it is an anecdote |
-| template | [`just-ai-help.config.example.json`](../just-ai-help.config.example.json) at the repo root |
+| template | **[`config.example.json`](config.example.json)** — copy it, it is annotated |
 
-```jsonc
-{
-  "localesDir": "src/renderer/src/i18n/locales",  // relative to your CURRENT DIRECTORY
-  "sourceLanguage": "en",
-  "targets": ["es"],
-  "placeholder": { "prefix": "{", "suffix": "}" },
-  "pluralSeparator": "|",
-  "context": "JustWrite, a desktop app for writing novels",
-  "glossary": { "doNotTranslate": ["JustWrite", "Tauri", "Vue"] },
-  "engine": "ollama"
-}
+```bash
+cp docs/config.example.json  path/to/your-app/just-ai-help.config.json
 ```
+
+The example is not reproduced here on purpose. A second copy of it in this file is a second
+thing to keep in step, and that is exactly the failure this page was written about — the
+example's own engine list had already drifted, naming five engines when eight ship.
 
 > **Known sharp edge.** `localesDir` resolves against the directory you run from, **not**
 > against the config file. That is why every command needs a `cd` into the project first, and
@@ -70,9 +65,11 @@ Rules a target language requires regardless of what the source did. Currently Sp
 questions and exclamations open with `¿` / `¡`. Two halves — a line injected into the prompt, and
 the paired punctuation the checks verify afterwards.
 
-Deliberately tiny. Its own header warns that language rules written from memory are "exactly how
-a confident wrong rule ends up applied to every future translation" — a language is added when
-someone who knows it says what the rule is.
+Deliberately tiny — **data only**. The reasoning, the incident that shaped the Spanish rule, and
+what you need before adding a language live in [`language-rules.md`](language-rules.md). Short
+version: a language is added when someone who knows it says what the rule is, and `pairedPunct`
+can only express "the target needs an opening mark the source lacks" — which fits Spanish and
+does **not** fit French's spaced punctuation or CJK's full-width forms.
 
 Read by `server/translate.js`, `server/server.js`, `server/terms.js`, `server/accepted.js`.
 
@@ -94,8 +91,13 @@ These appear in your `localesDir`, next to `en.json`. You do not create them.
 `package.json` × 3 — npm manifests. Root is scripts only; `client/` owns the UI dependencies;
 `server/` declares none, because it imports nothing but `node:` built-ins.
 
-`client/vite.config.js` — the UI build. `docs/models.json` — a reference table of which local
-model suits which hardware; **nothing reads it**, it is a document that happens to be JSON.
+`client/vite.config.js` — the UI build.
+
+**`docs/models.json` is gone** — it was a reference table of which local model suits which
+hardware, read by nothing, and a document written as JSON has no wrapping, no tables and no
+links, and shows every edit as one enormous changed line. It is
+[`models.md`](models.md) now. The rule it broke is worth stating: **JSON is for what a parser
+reads. If nothing parses it, it is prose, and prose belongs in `.md`.**
 
 `.jah.db` — not config. It is the review workspace's store: your place in a review, undo history,
 staged proposals, run history, and engine connections including keys. **Gitignored, and the tool

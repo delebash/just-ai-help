@@ -48,7 +48,7 @@ nothing to switch off. `think` has no global default; it belongs to the row, mat
 
 What gates the MoE is **memory, not the card**: ~15 GB across VRAM and system RAM, measured on
 8 GB VRAM + 32 GB system RAM. More VRAM only helps. 16 GB of system RAM with no large card is
-untested — that is the case `ollama-gemma3` exists for. Note `docs/models.json` tiers are keyed
+untested — that is the case `ollama-gemma3` exists for. Note `docs/models.md` tiers are keyed
 by VRAM, which is not this model's binding constraint.
 
 **Hy-MT2-7B is the speed option and it costs correctness** — a reproducible Spanish `¿` miss on
@@ -118,7 +118,7 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
      weakness — strings whose correct Spanish IS the English: `"No"`, `"General"`, `"Error"`,
      `"ID"`, `"Tauri ({version})"`, `"Vue 3 + Pinia"`, `"llama3.1:8b, gpt-4o-mini, …"` and the
      documented `"· {n} tokens"`. **So this check runs at an 8-in-9 false-positive rate on a real
-     catalogue** — it penalises the right answer, exactly as `models.json` warns, and that is now
+     catalogue** — it penalises the right answer, exactly as `models.md` warns, and that is now
      a measured rate rather than an anecdote.
 
    **What this says about the design.** The checks-as-spec layering works: the check added by
