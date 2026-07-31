@@ -1,0 +1,138 @@
+/* ============================================================
+   Design tokens for the review workspace.
+   Copied from @delebash/llm-ui's tokens.contract.css — that file is
+   documentation and applies no rules, so a host app must define these itself.
+   The shared primitives (.ui-btn, .ui-input, …) read them; without them they
+   fall back to safe defaults and look nothing like the rest of the family.
+   ============================================================ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces */
+  --bg:           oklch(0.985 0.004 85);
+  --surface:      oklch(1 0 0);
+  --surface-2:    oklch(0.975 0.004 85);
+  --surface-3:    oklch(0.955 0.005 85);
+
+  /* Lines */
+  --border:        oklch(0.91 0.005 85);
+  --border-soft:   oklch(0.94 0.004 85);
+  --border-strong: oklch(0.84 0.006 85);
+
+  /* Ink */
+  --ink:    oklch(0.22 0.008 85);
+  --ink-2:  oklch(0.38 0.008 85);
+  --muted:  oklch(0.55 0.008 85);
+  --subtle: oklch(0.72 0.006 85);
+
+  /* Accent — the family's oxblood */
+  --accent-hue:  14;
+  --accent:      oklch(0.46 0.105 var(--accent-hue));
+  --accent-ink:  oklch(0.40 0.092 var(--accent-hue));
+  --accent-soft: oklch(0.92 0.028 var(--accent-hue));
+  --accent-line: oklch(0.84 0.045 var(--accent-hue));
+  --on-accent:   white;
+
+  --gold:      oklch(0.62 0.085 80);
+  --gold-soft: oklch(0.92 0.045 80);
+
+  /* Type */
+  --font-ui:    "Spline Sans", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --font-mono:  "Spline Sans Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-display: var(--font-serif);
+  --font-body:    var(--font-ui);
+
+  /* Radii + shadow */
+  --r-sm: 6px;  --r-md: 10px;  --r-lg: 14px;  --r-xl: 20px;
+  --shadow-1: 0 1px 0 rgba(20,22,24,.04), 0 1px 3px rgba(20,22,24,.04);
+  --shadow-2: 0 1px 0 rgba(20,22,24,.05), 0 8px 24px rgba(20,22,24,.06);
+  --shadow-soft:   rgba(0,0,0,.08);
+  --shadow-medium: rgba(0,0,0,.18);
+
+  /* Functional colour */
+  --danger-hue: 35;  --success-hue: 150;  --info-hue: 220;
+
+  --danger-bg:   oklch(0.97 0.03 var(--danger-hue));
+  --danger-ink:  oklch(0.40 0.13 var(--danger-hue));
+  --danger-line: oklch(0.88 0.06 var(--danger-hue));
+  --danger:      oklch(0.62 0.17 var(--danger-hue));
+
+  --warn-bg:   oklch(0.97 0.03 75);
+  --warn-ink:  oklch(0.40 0.10 65);
+  --warn-line: oklch(0.85 0.08 75);
+
+  --success-bg:   oklch(0.95 0.04 var(--success-hue));
+  --success-ink:  oklch(0.40 0.13 var(--success-hue));
+  --success-line: oklch(0.82 0.07 var(--success-hue));
+  --success:      oklch(0.60 0.13 var(--success-hue));
+
+  --info-bg:   oklch(0.95 0.025 var(--info-hue));
+  --info-ink:  oklch(0.40 0.08 var(--info-hue));
+  --info-line: oklch(0.82 0.05 var(--info-hue));
+  --info:      oklch(0.55 0.10 var(--info-hue));
+
+  --scrim: oklch(0.2 0.005 85 / 0.5);
+  --primary-hover: oklch(0.3 0.008 85);
+
+  /* Button knobs the kit reads */
+  --btn-radius: var(--r-sm);
+  --btn-pad-y: 7px;   --btn-pad-x: 14px;
+  --btn-pad-y-sm: 4px; --btn-pad-x-sm: 11px;
+  --btn-font-size: 13px; --btn-font-size-sm: 12px;
+  --btn-text-transform: none;
+  --btn-letter-spacing: normal;
+}
+
+html[data-theme="dark"] {
+  --bg:        oklch(0.16 0.005 250);
+  --surface:   oklch(0.21 0.005 250);
+  --surface-2: oklch(0.185 0.005 250);
+  --surface-3: oklch(0.255 0.006 250);
+
+  --border:        oklch(0.31 0.007 250);
+  --border-soft:   oklch(0.27 0.005 250);
+  --border-strong: oklch(0.42 0.008 250);
+
+  --ink:    oklch(0.94 0.005 85);
+  --ink-2:  oklch(0.78 0.006 85);
+  --muted:  oklch(0.62 0.007 85);
+  --subtle: oklch(0.48 0.006 85);
+
+  --accent:      oklch(0.68 0.10 var(--accent-hue));
+  --accent-ink:  oklch(0.82 0.07 var(--accent-hue));
+  --accent-soft: oklch(0.30 0.045 var(--accent-hue));
+  --accent-line: oklch(0.42 0.06 var(--accent-hue));
+  --on-accent:   oklch(0.16 0.005 250);
+
+  --gold:      oklch(0.78 0.10 80);
+  --gold-soft: oklch(0.32 0.045 80);
+
+  --shadow-1: 0 1px 0 rgba(0,0,0,.4), 0 1px 3px rgba(0,0,0,.35);
+  --shadow-2: 0 1px 0 rgba(0,0,0,.45), 0 8px 24px rgba(0,0,0,.4);
+  --shadow-soft:   rgba(0,0,0,.20);
+  --shadow-medium: rgba(0,0,0,.45);
+
+  --danger-bg:   oklch(0.28 0.06 var(--danger-hue));
+  --danger-ink:  oklch(0.85 0.10 var(--danger-hue));
+  --danger-line: oklch(0.42 0.10 var(--danger-hue));
+  --danger:      oklch(0.72 0.15 var(--danger-hue));
+
+  --warn-bg:   oklch(0.28 0.05 75);
+  --warn-ink:  oklch(0.86 0.09 75);
+  --warn-line: oklch(0.42 0.08 75);
+
+  --success-bg:   oklch(0.26 0.05 var(--success-hue));
+  --success-ink:  oklch(0.85 0.10 var(--success-hue));
+  --success-line: oklch(0.42 0.08 var(--success-hue));
+  --success:      oklch(0.72 0.13 var(--success-hue));
+
+  --info-bg:   oklch(0.27 0.04 var(--info-hue));
+  --info-ink:  oklch(0.86 0.07 var(--info-hue));
+  --info-line: oklch(0.42 0.06 var(--info-hue));
+  --info:      oklch(0.72 0.10 var(--info-hue));
+
+  --scrim: oklch(0.04 0.005 85 / 0.7);
+  --primary-hover: oklch(0.6 0.01 85);
+}

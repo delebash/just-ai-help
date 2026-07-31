@@ -1,0 +1,27 @@
+{
+  "name": "just-ai-help-review-ui",
+  "private": true,
+  "type": "module",
+  "description": "The review workspace UI. Built to a COMMITTED dist/, so running the tool needs only node — npm install is for developing this folder, never for using it.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "vue": "^3.5.13",
+    "pinia": "^3.0.1",
+    "reka-ui": "^2.10.0",
+    "vue-sonner": "^2.0.9",
+    "@tanstack/vue-table": "^8.21.3",
+    "@vueuse/core": "^14.3.0",
+    "marked": "^18.0.5"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0",
+    "@vitejs/plugin-vue": "^6.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "vue-demi@0.14.10": true
+  }
+}

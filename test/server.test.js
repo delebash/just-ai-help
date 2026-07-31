@@ -246,6 +246,17 @@ test("a job scope that selects nothing is refused rather than started", async ()
 	});
 });
 
+test("AN UNKNOWN SCOPE IS REFUSED, not silently read as 'flagged'", async () => {
+	// Found by driving the real 2,039-key catalogue: a typo'd scope started a 154-key run.
+	// A 52-minute job must never begin on a scope the caller did not ask for.
+	await withServer(async ({ api, server }) => {
+		const res = await api("POST", "/api/jobs", { lang: "es", scope: "flaged" });
+		assert.equal(res.status, 400);
+		assert.match(res.body.error, /unknown scope/);
+		assert.equal(server.jah.jobs.busy, false, "and nothing may have started");
+	});
+});
+
 test("an unknown language is refused", async () => {
 	await withServer(async ({ api }) => {
 		const res = await api("POST", "/api/jobs", { lang: "de", scope: "flagged" });

@@ -480,9 +480,16 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 	});
 
 	/** Resolves a scope into a key subset and hands it to the job manager. */
+	/** The only scopes a run may have. Anything else is a typo, and a typo must not start a job. */
+	const SCOPES = new Set(["flagged", "unsure", "all", "keys"]);
+
 	function startJob(b, res) {
 		const { lang, connectionId = null, engine = null, scope = "flagged", keys = null } = b;
 		if (!langs.includes(lang)) return json(res, 400, { error: `unknown language: ${lang}` });
+		// Found by driving the real catalogue: an unrecognised scope fell through to the
+		// flagged branch and started a 154-key run. A 52-minute job must never begin on a scope
+		// the caller did not ask for, so an unknown one is refused rather than interpreted.
+		if (!SCOPES.has(scope)) return json(res, 400, { error: `unknown scope: ${scope}. Use one of ${[...SCOPES].join(", ")}` });
 
 		const profile = connectionId ? resolveConnection(db, connectionId) : null;
 		if (connectionId && !profile) return json(res, 404, { error: `no such connection: ${connectionId}` });

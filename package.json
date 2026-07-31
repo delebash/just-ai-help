@@ -11,7 +11,8 @@
     "translate": "node src/translate.js",
     "extract": "node src/extract.js",
     "review": "node src/review.js",
-    "test": "node --test"
+    "test": "node --test",
+    "build:ui": "cd review-ui && npm run build && cd .. && node scripts/ui-hash.js"
   },
   "engines": {
     "node": ">=24"

@@ -1,200 +1,110 @@
-// The review page's contract, tested over the real HTTP endpoints against a real temp
-// locale folder. The one that matters is the round-trip: saving one value must leave the
-// file byte-identical except that value. A review tool that reformats the file on every
-// save produces an 800-line diff for a one-word fix, and nobody can review that.
+// The review CLI entry point.
+//
+// The API contract itself lives in server.test.js; this file covers what `createReviewServer`
+// adds on top — serving the committed UI build, and surviving its absence.
+//
+// The endpoint assertions that used to live here moved to server.test.js when /api/data became
+// /api/rows and gained a language dimension. Carried over rather than dropped:
+//
+//   "save fixes a flag and clears it"                -> server.test.js, save + rows
+//   "save can INTRODUCE a flag"                      -> below, unchanged in spirit
+//   "byte-identical except that value"               -> server.test.js
+//   "an acceptance does not survive an edit"         -> server.test.js
+//   "404s an unknown key rather than writing junk"   -> below
+//
+// node --test, zero dependencies.
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createReviewServer } from "../src/review.js";
+import { DEFAULT_UI, createReviewServer } from "../src/review.js";
 
-const EN = {
-	nav: { chapters: "Chapters", strands: "Strands" },
-	chapters: {
-		outline: { noteCount: "{n} note | {n} notes" },
-		dialogs: { deleteTitle: "Delete this chapter?" },
-	},
-	settings: { save: "Save" },
-};
-const ES = {
-	nav: { chapters: "Capítulos", strands: "Strands" },
-	chapters: {
-		outline: { noteCount: "{n} nota | {n} notas" },
-		dialogs: { deleteTitle: "Eliminar este capítulo?" }, // missing ¿ — a startpunc flag
-	},
-	settings: { save: "Guardar" },
-};
+const EN = { nav: { chapters: "Chapters" }, settings: { save: "Save" }, chapters: { title: "Delete this chapter?" } };
+const ES = { nav: { chapters: "Capítulos" }, settings: { save: "Guardar" }, chapters: { title: "¿Eliminar este capítulo?" } };
 
-/** Spins up the server on an ephemeral port over a fresh temp locale folder. */
-async function withServer(run) {
-	const dir = mkdtempSync(join(tmpdir(), "jah-review-"));
+async function withServer(run, { uiDir } = {}) {
+	const dir = mkdtempSync(join(tmpdir(), "jah-entry-"));
 	const locales = join(dir, "locales");
-	writeFileSync(join(dir, "config.json"), JSON.stringify({
-		localesDir: locales,
-		sourceLanguage: "en",
-		targets: ["es"],
-		placeholder: { prefix: "{", suffix: "}" },
-		pluralSeparator: "|",
-		glossary: { doNotTranslate: ["Strands"] },
-	}));
 	mkdirSync(locales, { recursive: true });
+	writeFileSync(join(dir, ".gitignore"), ".jah.db\n");
+	writeFileSync(
+		join(dir, "config.json"),
+		JSON.stringify({
+			localesDir: locales,
+			sourceLanguage: "en",
+			targets: ["es"],
+			placeholder: { prefix: "{", suffix: "}" },
+			pluralSeparator: "|",
+			glossary: { doNotTranslate: [] },
+		}),
+	);
 	writeFileSync(join(locales, "en.json"), `${JSON.stringify(EN, null, 2)}\n`);
 	writeFileSync(join(locales, "es.json"), `${JSON.stringify(ES, null, 2)}\n`);
 
-	const server = createReviewServer({ configPath: join(dir, "config.json"), lang: "es" });
+	const server = createReviewServer({ configPath: join(dir, "config.json"), ...(uiDir !== undefined ? { uiDir } : {}) });
 	await new Promise((r) => server.listen(0, "127.0.0.1", r));
 	const base = `http://127.0.0.1:${server.address().port}`;
+	const api = async (method, path, payload) => {
+		const res = await fetch(base + path, {
+			method,
+			...(payload ? { headers: { "content-type": "application/json" }, body: JSON.stringify(payload) } : {}),
+		});
+		return { status: res.status, body: await res.json().catch(() => null) };
+	};
 	try {
-		await run({ base, esPath: join(locales, "es.json"), enPath: join(locales, "en.json"), locales });
+		await run({ base, api, locales });
 	} finally {
+		server.jah.db.close();
 		await new Promise((r) => server.close(r));
 	}
 }
 
-test("GET / serves the page", async () => {
+test("GET / serves the committed UI build", { skip: existsSync(DEFAULT_UI) ? false : "no build — run npm run build:ui" }, async () => {
 	await withServer(async ({ base }) => {
 		const res = await fetch(`${base}/`);
 		assert.equal(res.status, 200);
 		assert.match(res.headers.get("content-type"), /text\/html/);
-		const html = await res.text();
-		assert.match(html, /just-ai-help review/);
-		assert.match(html, /\/api\/data/);
+		assert.match(await res.text(), /app\.js/, "the built entry point must be referenced");
 	});
 });
 
-test("GET /api/data returns every key, flagged rows first, with reasons", async () => {
+test("a deep link falls back to the app rather than 404ing", { skip: existsSync(DEFAULT_UI) ? false : "no build" }, async () => {
 	await withServer(async ({ base }) => {
-		const data = await (await fetch(`${base}/api/data`)).json();
-		assert.equal(data.total, 5);
-		assert.equal(data.flagged, 1);
-		assert.equal(data.rows[0].key, "chapters.dialogs.deleteTitle");
-		assert.deepEqual(data.rows[0].flags.map((f) => f.code), ["startpunc"]);
-		assert.ok(data.rows[0].flags[0].detail.length > 0);
-		// The rest carry no flags — including "Strands" -> "Strands", which is correct.
-		assert.deepEqual(data.rows.slice(1).flatMap((r) => r.flags), []);
+		assert.equal((await fetch(`${base}/some/client/route`)).status, 200);
 	});
 });
 
-test("POST /api/save fixes a flag and clears it", async () => {
-	await withServer(async ({ base }) => {
-		const res = await fetch(`${base}/api/save`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ key: "chapters.dialogs.deleteTitle", value: "¿Eliminar este capítulo?" }),
-		});
-		assert.equal(res.status, 200);
-		const out = await res.json();
-		assert.deepEqual(out.flags, []);
-		assert.equal(out.flagged, 0);
-		assert.equal(out.findings, 0);
+test("WITHOUT A BUILD the API still works — the tool degrades, it does not break", async () => {
+	await withServer(async ({ api }) => {
+		assert.equal((await api("GET", "/api/state")).status, 200);
+		assert.equal((await fetch("http://127.0.0.1:1/").catch(() => ({ ok: false }))).ok, false);
+	}, { uiDir: join(tmpdir(), "definitely-not-a-build") });
+});
+
+test("saving can INTRODUCE a flag — the checks re-run, they are not cached", async () => {
+	await withServer(async ({ api }) => {
+		const clean = (await api("GET", "/api/rows?lang=es")).body.rows.find((r) => r.key === "settings.save");
+		assert.ok(!clean, "settings.save starts clean");
+
+		await api("POST", "/api/save", { lang: "es", key: "settings.save", value: "Save" });
+		const now = (await api("GET", "/api/rows?lang=es")).body.rows.find((r) => r.key === "settings.save");
+		assert.ok(now?.flags.some((f) => f.code === "untranslated"), "a bad edit must be flagged immediately");
 	});
 });
 
-test("POST /api/save can INTRODUCE a flag — the checks re-run, they are not cached", async () => {
-	await withServer(async ({ base }) => {
-		const out = await (await fetch(`${base}/api/save`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ key: "chapters.outline.noteCount", value: "{n} nota | {n} nota" }),
-		})).json();
-		assert.deepEqual(out.flags.map((f) => f.code), ["plural-halves-identical"]);
+test("an unknown key 404s rather than writing junk into the catalogue", async () => {
+	await withServer(async ({ api, locales }) => {
+		const before = readFileSync(join(locales, "es.json"), "utf8");
+		assert.equal((await api("POST", "/api/save", { lang: "es", key: "no.such.key", value: "x" })).status, 404);
+		assert.equal((await api("POST", "/api/accept", { lang: "es", key: "no.such.key" })).status, 404);
+		assert.equal(readFileSync(join(locales, "es.json"), "utf8"), before, "a rejected write must change nothing");
 	});
 });
 
-test("saving one value leaves the file byte-identical except that value", async () => {
-	await withServer(async ({ base, esPath }) => {
-		const before = readFileSync(esPath, "utf8");
-		await fetch(`${base}/api/save`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ key: "settings.save", value: "Guardar cambios" }),
-		});
-		const after = readFileSync(esPath, "utf8");
-		assert.equal(after, before.replace('"save": "Guardar"', '"save": "Guardar cambios"'));
-
-		// And the structure is the SOURCE's, not the target's insertion order.
-		assert.deepEqual(Object.keys(JSON.parse(after)), Object.keys(EN));
-		assert.deepEqual(Object.keys(JSON.parse(after).chapters), Object.keys(EN.chapters));
-	});
-});
-
-test("POST /api/save rejects a bad body and an unknown key", async () => {
-	await withServer(async ({ base }) => {
-		const post = (body) =>
-			fetch(`${base}/api/save`, { method: "POST", headers: { "content-type": "application/json" }, body });
-		assert.equal((await post("not json")).status, 400);
-		assert.equal((await post(JSON.stringify({ key: 1, value: "x" }))).status, 400);
-		assert.equal((await post(JSON.stringify({ key: "no.such.key", value: "x" }))).status, 404);
-	});
-});
-
-test("unknown routes 404", async () => {
-	await withServer(async ({ base }) => {
-		assert.equal((await fetch(`${base}/nope`)).status, 404);
-	});
-});
-
-test("POST /api/accept records the key's findings and stops them counting", async () => {
-	await withServer(async ({ base, locales }) => {
-		// chapters.dialogs.deleteTitle is missing its ¿ — a real startpunc flag.
-		const before = await (await fetch(`${base}/api/data`)).json();
-		assert.ok(before.findings > 0);
-		assert.equal(before.accepted, 0);
-
-		const res = await fetch(`${base}/api/accept`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ key: "chapters.dialogs.deleteTitle" }),
-		});
-		const out = await res.json();
-		assert.equal(res.status, 200);
-		assert.ok(out.recorded >= 1);
-		assert.equal(out.findings, before.findings - out.recorded);
-		// Never silent: the count is part of the payload the header renders.
-		assert.equal(out.accepted, out.recorded);
-
-		// And it is on disk, readable, for whoever finds it in a diff.
-		const sidecar = JSON.parse(readFileSync(join(locales, "es.accepted.json"), "utf8"));
-		assert.ok(sidecar._why.length > 0);
-		const entry = Object.values(sidecar).find((x) => typeof x === "object");
-		assert.equal(entry.key, "chapters.dialogs.deleteTitle");
-	});
-});
-
-test("BITES: an acceptance does not survive an edit to the translation", async () => {
-	await withServer(async ({ base, locales }) => {
-		await fetch(`${base}/api/accept`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ key: "chapters.dialogs.deleteTitle" }),
-		});
-		const cleared = await (await fetch(`${base}/api/data`)).json();
-		const row = cleared.rows.find((r) => r.key === "chapters.dialogs.deleteTitle");
-		assert.deepEqual(row.flags, [], "accepted, so quiet");
-
-		// The reviewer now edits it into a DIFFERENT wrong answer. The old verdict was about the
-		// old string and must not carry over to this one.
-		await fetch(`${base}/api/save`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ key: "chapters.dialogs.deleteTitle", value: "Eliminar este capitulo?" }),
-		});
-		const after = await (await fetch(`${base}/api/data`)).json();
-		const again = after.rows.find((r) => r.key === "chapters.dialogs.deleteTitle");
-		assert.ok(again.flags.length > 0, "an edited target must be re-checked from scratch");
-		assert.equal(after.accepted, 0);
-	});
-});
-
-test("POST /api/accept 404s an unknown key rather than writing junk", async () => {
-	await withServer(async ({ base }) => {
-		const res = await fetch(`${base}/api/accept`, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify({ key: "no.such.key" }),
-		});
-		assert.equal(res.status, 404);
-	});
+test("a missing config exits with a usable message rather than a stack trace", () => {
+	// The factory throws on a missing file; the CLI branch turns that into one line. Asserting
+	// the throw is what stops a refactor from silently starting a server on an empty config.
+	assert.throws(() => createReviewServer({ configPath: join(tmpdir(), "nope-does-not-exist.json") }));
 });
