@@ -500,9 +500,13 @@ substitution never touched. Adding `AI` turned **48 correct translations into fi
 everywhere they appear. CLAUDE.md said "shielding is a substitution, never an instruction" —
 half true, now corrected.
 
-**2. `suspects.topN` is a display window, not a total.** The probe recorded **182** disagreements;
-`topN: 30` showed thirty. **~16% of the signal was visible.** A key with a real semantic defect
-sat in the other 84% and never surfaced. `topN` must scale with the catalogue.
+**2. `suspects.topN` is a display window, not a total.** The probe found **150** disagreeing keys;
+`topN: 30` reported thirty, so **20% of the signal was visible** and a key with a real semantic
+defect sat in the invisible 120. And the ranking did not earn the cut it makes: the two semantic
+defects ranked **#22 and #30 of the 30 shown**, the hidden 120 have a median spread of 0.17
+against 0.18 for all 150, and 21 hidden keys disagreed badly (≥ 0.5). `src/suspects.js` records
+those planted defects ranking #1 and #3 on the original 40-key corpus — **that does not hold at
+1,965 keys.** `topN` is a display budget, not engine time; set it above the disagreement count.
 
 **3. Two real defects passed every structural check AND both probe passes.**
 `settings.backups.dataFolderHint` — "Everything JustWrite saves lives here" — came back as "Todo

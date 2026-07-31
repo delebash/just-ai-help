@@ -248,10 +248,26 @@ documented: the second probe pass wrote "**guarda vidas**", so the two passes di
 wording while making the identical misreading. `--probe` measures self-consistency, and a model
 can be consistently wrong.
 
-**And it did not even surface.** That key was one of **182** disagreements the probe recorded;
-`"suspects": { "topN": 30 }` shows thirty at a time, so ~16% of the signal was visible in any one
-run. Scale `topN` with the catalogue, or expect to escalate in rounds — and either way, read the
-file. Nothing here replaces that.
+**And the other one never surfaced at all.** The probe found **150** keys whose two passes
+disagree; `"suspects": { "topN": 30 }` reports thirty, so **20% of the signal was visible** and
+`foreshadowing.reviewDesc` — "Setups your manuscript **plants**" read as *houseplants* — sat in
+the invisible 120.
+
+Worse, the ranking did not help on the ones it did show. Suspects are ordered by token-set spread
+— how *differently* the second pass worded it — and the two semantic defects ranked **#22 and #30
+of 30**, at the very bottom of the window. At the `topN: 20` this README suggested for a year,
+both would have been invisible. The hidden 120 have a median spread of 0.17 against 0.18 for all
+150: **the hidden set is not measurably less suspicious, just less wordy.** Twenty-one hidden keys
+disagreed badly (spread ≥ 0.5), including the gender split at the root of a feature-wide naming
+inconsistency.
+
+That is a real limit on `rankSuspects`, and it is worth stating plainly: spread measures
+*disagreement*, and a semantic misreading can be one word. The header comment in `src/suspects.js`
+records the two planted defects ranking **#1 and #3** on the original 40-key corpus. **That result
+does not hold at 1,965 keys.**
+
+`topN` is a display budget, not engine time — `--escalate` is what costs. Set it above your
+disagreement count and read the list. Nothing here replaces reading the file.
 
 Two fixes, in this order, because the first is free:
 

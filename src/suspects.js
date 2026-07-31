@@ -22,6 +22,20 @@
 // ones that moved. The known FALSE positive (`· {n} tokens`, correctly left alone by every
 // model) sank to #18, because agreement is the signal.
 //
+// THAT RANKING RESULT DOES NOT HOLD AT SCALE. Re-measured 2026-07-31 on the same catalogue
+// grown to 1,965 keys: 150 keys disagreed, and the run's two genuine semantic defects ranked
+// #22 and #30 of the 30 reported — the bottom of the window, invisible at the topN: 20 the
+// docs suggested. The 120 keys that never surfaced have a median spread of 0.17 against 0.18
+// for all 150, so the hidden set is not measurably less suspicious, just less wordy; 21 of
+// them disagreed at >= 0.5, including the gender split behind a feature-wide naming mess.
+//
+// The mechanism is the reason: spread measures how DIFFERENTLY the second pass worded it, and
+// a semantic misreading can be a single word — "plants" read as a noun instead of a verb moves
+// two tokens. So the disagreement SET is the useful output and the ORDER within it is weak
+// evidence. Set topN above the disagreement count and read the list; topN costs display space,
+// not engine time, and --escalate is what spends the budget. Do not add ranking cleverness
+// here on the strength of the 40-key numbers above — they are a small-corpus result.
+//
 // Two different models was tried and is WORSE: they word everything differently, so real
 // defects drown in stylistic noise — "Contraer" vs "Colapsar" outranked the hallucination.
 // Same model twice also needs no second model chosen, downloaded or configured, and reuses

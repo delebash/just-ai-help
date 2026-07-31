@@ -140,10 +140,12 @@ same model and flags the keys where the two passes disagree — where a model is
 itself, where it is guessing it wanders. It costs a second full pass of engine time, which is
 why it is opt-in. Set the budget with `"suspects": { "topN": 20 }`.
 
-**Set `topN` against the size of your catalogue.** It is a display window, not a total: on a
-1,965-key run the probe recorded **182** disagreements and `topN: 30` showed thirty of them, so
-five sixths of the signal was invisible until the first thirty were dealt with. Raise it, or
-plan to run `--escalate` in rounds until the count stops falling.
+**Set `topN` above your disagreement count.** It is a display window, not a total, and it costs
+nothing — engine time is spent by `--escalate`, which acts on what gets reported. On a 1,965-key
+run the probe found **150** disagreeing keys and `topN: 30` showed thirty, so four fifths were
+invisible. Do not trust the ranking to pick for you: on that run the two genuinely wrong keys
+ranked **#22 and #30 of the 30 shown**, because suspects are ordered by how *differently* the
+second pass worded it and a semantic misreading can be a single word.
 
 And know what `--probe` cannot do: it measures whether the model *agrees with itself*, so a
 model that is confidently wrong twice looks clean. On that same run, "Everything JustWrite saves
