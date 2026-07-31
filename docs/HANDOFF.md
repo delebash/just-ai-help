@@ -520,3 +520,63 @@ by reading the file, and nothing else would have found them.
 `8774936`), which made git classify the project's most important file as **binary** — its diffs
 rendered as "Binary files differ" and `grep`/`Grep` skipped it silently. Replaced with the
 six-character escape; no behaviour change, 75 tests still pass.
+
+---
+
+## 2026-07-31 — config, paths and engines: five defects with one shape
+
+All five were the same disease: **a fact stored in more than one place, with copies that
+disagreed.** Each fix ships a test that was watched failing with the fix reverted.
+
+**1. There were TWO engine resolvers.** The CLI layered the project config over an
+`engines.json` row; the workspace resolved a connection and layered *nothing* — `cfg.model`,
+`cfg.url` and `cfg.think` appeared **zero times** in `server.js`'s job path. An override set in
+your config worked from the terminal and was silently ignored when you pressed re-translate in
+the UI. Same tool, same config, two answers, no warning. `server/engine.js` is the one merge
+now, used by the CLI, the job path and the back-translation endpoint.
+
+**2. Every path resolved against the working directory.** That is why every documented command
+began with a `cd`. The cache was worse — running from the wrong folder silently started with
+*no cache* and re-translated everything, which is exactly what cost 27 minutes and 464
+hand-corrected keys earlier the same day. `server/paths.js` owns it; `test/paths.test.js` runs
+the resolver from an unrelated directory. `server.js` was the clearest case: it computed the
+right anchor on line 100 and did not use it on line 101.
+
+**3. `placeholder` and `pluralSeparator` are read from `en.json`** (`server/infer.js`).
+`pluralSeparator` was the sharp one: honoured by the checks and **ignored by the prompt**, which
+had `" | "` typed into it. It worked on the default by coincidence; set `";"` and the model was
+told the wrong separator, did not preserve yours, and the checker then reported
+`plural-halves-lost` — blaming the model for obeying the tool.
+
+**4. Acceptances record `by` and `at`**, outside the hash. Unclaimed writes `unknown` with a
+loud warning, deliberately *not* the OS username: an automated run under a developer's account
+would otherwise be indistinguishable from that developer's judgement.
+
+**5. Documents stopped pretending to be config.** `models.json` → `models.md` (nothing ever read
+it); `conventions.json` was 81% commentary and is data only, with the reasoning in
+`language-rules.md` — which now also records that `pairedPunct` is Spanish-shaped and **cannot**
+express French's spaced punctuation or CJK full-width forms.
+
+**The config is four fields:** `locales`, `targets`, `context`, `glossary`. Old key names still
+work. 181 tests, up from 153.
+
+### In JustWrite
+
+The tool's whole footprint is one folder, `justwrite-app/just-ai-help/` — config plus the review
+sidecars, with `locales/` holding nothing but locale files. Delete the folder and the app still
+builds and runs in Spanish.
+
+**Adding a language there is now dropping a file in.** `i18n/index.js` used to name every locale
+three times; it discovers them with `import.meta.glob` and names them with `Intl.DisplayNames`,
+so a new `fr.json` appears in the picker as "Français" with no code edit. Verified by doing it.
+A test reads that file as text and fails if a code or a label is hardcoded back in.
+
+**The 58 acceptances now say `by: "claude (bulk, unreviewed)"`.** They are not human verdicts —
+an agent generated them by script, 55 of them by a rule that took every finding of one type, and
+the format could not tell them from review until someone asked. They are left in rather than
+deleted so the gate stays green; ~25 are glyphs anyone clears in seconds, and the ones worth a
+real look are `AI`, `Runtime`, `Chat`, `POV`, `Marketing`, `beats`. Deleting the file re-raises
+all 58.
+
+**Still open:** the ~134 advisory `disagreement` suspects, and whether Spanish ships (it is
+committed and testable via Settings → Project → Language).
