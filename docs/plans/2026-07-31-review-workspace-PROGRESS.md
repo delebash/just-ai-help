@@ -12,12 +12,15 @@ Read branch and commit state from git, never from this file.
 | phase | what | state |
 |---|---|---|
 | 0 | database — `node:sqlite`, providers/connections, gitignore guard | ✅ **done** — `4a39431` |
-| 1 | server: store, unaccept, action log, notes, terms, siblings, engines | 🔨 in progress |
-| 2 | jobs: SSE progress, cancel, rejoin | ⬜ |
-| 3 | `review-ui/` Vue app: queue, list, detail, keyboard, undo | ⬜ |
-| 4 | second opinion: Google widget, local re-translate, back-translation | ⬜ |
-| 5 | terminology check + notes feeding the next run | ⬜ |
+| 1a | `store.js` + `terms.js` | ✅ **done** — `05b01dc` |
+| 2 | `jobs.js`: progress, cancel, rejoin, proposals-only | ✅ **done** — `9de86c5` |
+| 1b | `server.js`: the whole API over HTTP | ✅ **done** — 23 tests |
+| 3 | `review-ui/` Vue app: queue, list, detail, keyboard, undo | 🔨 next |
+| 4 | second opinion wiring: Google frame, re-translate, back-translation | ⬜ (frame endpoint done) |
+| 5 | notes feeding the next run (`loop.js` prompt injection) | ⬜ (storage done) |
 | 6 | docs: GUIDE, README, CLAUDE.md, HANDOFF | ⬜ |
+
+**140 tests pass.**
 
 ## Non-negotiables carried from the design
 
