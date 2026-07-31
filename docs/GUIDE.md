@@ -140,6 +140,16 @@ same model and flags the keys where the two passes disagree — where a model is
 itself, where it is guessing it wanders. It costs a second full pass of engine time, which is
 why it is opt-in. Set the budget with `"suspects": { "topN": 20 }`.
 
+**Set `topN` against the size of your catalogue.** It is a display window, not a total: on a
+1,965-key run the probe recorded **182** disagreements and `topN: 30` showed thirty of them, so
+five sixths of the signal was invisible until the first thirty were dealt with. Raise it, or
+plan to run `--escalate` in rounds until the count stops falling.
+
+And know what `--probe` cannot do: it measures whether the model *agrees with itself*, so a
+model that is confidently wrong twice looks clean. On that same run, "Everything JustWrite saves
+lives here" came back as "Todo JustWrite salva vidas aquí" — "saves lives" — and the second pass
+made the same misreading in different words. No check catches that. Read the file.
+
 **3 — Review.** Opens `http://localhost:4780`. Flagged rows are pinned to the top with the
 reason attached; edit in the box, it saves when you click away and re-checks that key. The
 JSON files are the only state — no database, no account. You can also just edit the JSON.
@@ -226,6 +236,21 @@ If it is a *brand or technical term* (`Tauri`, `Vue 3 + Pinia`, a model id, `tok
 `glossary.doNotTranslate`. That is not a workaround: it also shields the term from the model
 during translation, which is what you wanted anyway. On the JustWrite catalogue this alone took
 `untranslated` from 11 findings to 7.
+
+**But only if the term must never be translated *anywhere*.** The glossary is not just a
+substitution — every term also goes into the system prompt as `never translate these terms`, and
+the model applies that to lowercase and inflected forms the substitution itself would never
+touch. So a word that is a label in one string and ordinary prose in another will bleed. Both
+halves of that were measured on the 1,965-key JustWrite run:
+
+- Adding `AI` turned **48 correct translations into findings**. "Exclude from AI" must become
+  "Excluir de la IA"; there is no way to shield the acronym and still allow that.
+- `Strands` — a genuine product name — made the model write "la Strand narrativa" for "the
+  narrative strand", even though `shield()` is case-sensitive and word-bounded and so never
+  substituted anything there. The instruction did it, not the substitution.
+
+The test: *would you be unhappy to see this word translated in a full sentence?* If no, keep it
+out of the glossary and accept the label instead.
 
 If it is a *word that is genuinely the same in both languages* — Spanish `No`, `Error`, `ID`,
 `total` — that is a judgement only you can make, so make it once with **correct as-is** or

@@ -224,6 +224,35 @@ sharply by precision:
 | `endpunc` | 5 | 0 (every one a duplicate of a `spurious-interrogative` hit) |
 | `untranslated` | 20 | **1** |
 
+Re-measured at full scale on 2026-07-30 — the same catalogue grown to **1,965 keys**, one MoE
+pass plus both `--probe` passes in 51.6 min, 1,965/1,965 translated:
+
+| check | findings | real errors |
+|---|---|---|
+| `untranslated` | 56 | **2** (both a word translated under `nav.*` and left English elsewhere) |
+| `endpunc` | 6 | **6** |
+| `spurious-interrogative` | 3 | **3** |
+| `whitespace` | 1 | **1** (a silently truncated sentence) |
+| *found only by reading the file* | — | **2** |
+
+Two things in that table are worth more than the rest of this section.
+
+**`untranslated` is a worklist, not a verdict** — 54 of its 56 findings were correct output. It
+is still the check that found the two real ones, and no cheaper check would have.
+
+**The last row is the honest one.** Two defects passed every structural check *and* both probe
+passes. `settings.backups.dataFolderHint` — "Everything JustWrite saves lives here" — came back
+as "Todo JustWrite **salva vidas** aquí", "saves lives". Placeholders intact, punctuation
+correct, plurals correct, nothing to flag. This is the documented blind spot behaving exactly as
+documented: the second probe pass wrote "**guarda vidas**", so the two passes disagreed on
+wording while making the identical misreading. `--probe` measures self-consistency, and a model
+can be consistently wrong.
+
+**And it did not even surface.** That key was one of **182** disagreements the probe recorded;
+`"suspects": { "topN": 30 }` shows thirty at a time, so ~16% of the signal was visible in any one
+run. Scale `topN` with the catalogue, or expect to escalate in rounds — and either way, read the
+file. Nothing here replaces that.
+
 Two fixes, in this order, because the first is free:
 
 **1. Put technical terms in the glossary.** `checkUntranslated` already exempts a string that is

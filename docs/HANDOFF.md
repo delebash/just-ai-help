@@ -468,3 +468,51 @@ unexplained — the test is a synchronous 1005-iteration loop and `addStatusDef`
 `COALESCED_ACTIONS`, so the 600 ms coalescing window should not reach it. Recorded in
 `justwrite-app/docs/TASKS.md` rather than guessed at, because a fix built on a wrong mechanism is
 worse than a known flake.
+
+---
+
+## 2026-07-30 — the full 1,965-key run, triaged to a green gate
+
+**The whole catalogue has now been translated, probed, escalated and triaged.** The output is
+`.evidence/2026-07-30-justwrite-es/` (gitignored, with the config that produced it). It has
+**not** been landed in JustWrite — that is USER-OWNED and still open.
+
+**The run.** MoE default (`ollama`), 1,965 keys, translate + both `--probe` passes in **51.6 min**.
+One key — `readerKnowledge.intro`, five placeholders — exhausted every retry and was reported by
+name, exactly as designed; re-run in isolation it succeeded on request 5. Final: **1,965/1,965**.
+
+**Escalation works, and it is cheap.** 36 flagged keys re-done with `ollama-gemma3` cost **2.0 min**
+and fixed **7 of the 8** hard defects, including a silently truncated sentence and the `Strands`
+bleed. It introduced 2 new defects of its own, both caught by the checks. Net 42 → 33 findings.
+
+**Final state: `--check-only` exits 0** — zero structural findings, 57 accepted, 8 advisory
+disagreements outstanding.
+
+### Three findings that outrank the run itself
+
+**1. The glossary is also an instruction, and that half leaks.** `buildSystemPrompt()` writes
+every `doNotTranslate` term into the prompt as `never translate these terms`, while `shield()`
+substitutes only case-sensitive word-bounded matches — so the model obeys the prompt on forms the
+substitution never touched. Adding `AI` turned **48 correct translations into findings**
+("Exclude from AI" → "Excluir de la IA" is right and cannot be shielded). `Strands` produced
+"la Strand narrativa" for "the narrative strand" with no substitution involved. Reverted `AI`,
+`POV`, `Chat`, `Runtime`, `Marketing`; kept `TODO`, `AM`, `PM`, `RAG`, which are labels
+everywhere they appear. CLAUDE.md said "shielding is a substitution, never an instruction" —
+half true, now corrected.
+
+**2. `suspects.topN` is a display window, not a total.** The probe recorded **182** disagreements;
+`topN: 30` showed thirty. **~16% of the signal was visible.** A key with a real semantic defect
+sat in the other 84% and never surfaced. `topN` must scale with the catalogue.
+
+**3. Two real defects passed every structural check AND both probe passes.**
+`settings.backups.dataFolderHint` — "Everything JustWrite saves lives here" — came back as "Todo
+JustWrite **salva vidas** aquí", *saves lives*. Pass 2 wrote "**guarda vidas**": the two passes
+disagreed on wording while making the identical misreading. This is the documented blind spot
+behaving as documented. The other was `autoconservado` where the catalogue's other 11 autosave
+strings say `autoguardado` — no check compares a term against its own catalogue. Both were found
+by reading the file, and nothing else would have found them.
+
+**Also fixed here: `src/checks.js` contained a literal NUL byte** (since the first checks commit,
+`8774936`), which made git classify the project's most important file as **binary** — its diffs
+rendered as "Binary files differ" and `grep`/`Grep` skipped it silently. Replaced with the
+six-character escape; no behaviour change, 75 tests still pass.
