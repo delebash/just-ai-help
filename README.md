@@ -135,7 +135,8 @@ gate, it is the feed the review workspace triages on.
 ## Quick start
 
 ```bash
-cp docs/config.example.json just-ai-help.config.json   # then edit it
+mkdir your-app/just-ai-help                            # one folder, the whole footprint
+cp docs/config.example.json your-app/just-ai-help/config.json   # then edit it
 export GEMINI_API_KEY=...            # free tier, no card: aistudio.google.com
 npm run translate
 ```
@@ -201,7 +202,7 @@ implementation), to save you one Ollama install.
 ### The review workspace
 
 ```bash
-node server/review.js just-ai-help.config.json    # http://localhost:4780
+node server/review.js your-app/just-ai-help/config.json    # http://localhost:4780
 ```
 
 A three-pane workspace: a queue of buckets with live counts, a key list, and a detail panel

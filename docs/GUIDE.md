@@ -10,15 +10,15 @@ it does; this page just tells you what to run.
 
 ## 1. What you need
 
-- **Node 20 or newer.** That is the whole install — there are no npm packages to fetch.
+- **Node 24 or newer.** That is the whole install for a user: the review UI ships as a committed build and SQLite is inside Node itself.
 - **An engine**: either Ollama on your own machine (free, private, slower) or an online API
   key (fast, costs money or is heavily rate-limited).
 
 ```bash
-node --version      # v20+
+node --version      # v24+
 git clone <this repo>
 cd just-ai-help
-npm test            # 75 tests, should all pass
+npm test            # 181 tests, should all pass
 ```
 
 ---
@@ -86,14 +86,15 @@ local is free, private, and good enough — that is the whole point of the measu
 ## 3. Configure it
 
 ```bash
-cp docs/config.example.json just-ai-help.config.json
+mkdir your-app/just-ai-help
+cp docs/config.example.json your-app/just-ai-help/config.json
 ```
 
-Put the copy **next to the strings it describes** and edit it. Four fields:
+The folder is the tool's whole footprint in your app. Edit the copy — four fields:
 
 ```json
 {
-  "locales": "src/i18n/locales",
+  "locales": "../src/i18n/locales",
   "targets": ["es"],
   "context": "a desktop app for managing recipes",
   "glossary": ["Acme", "Smart Pantry"]
@@ -115,7 +116,7 @@ Put the copy **next to the strings it describes** and edit it. Four fields:
 **Run it from anywhere.** Every path resolves against the config file, not your shell:
 
 ```bash
-node path/to/just-ai-help/server/translate.js path/to/your-app/just-ai-help.config.json
+node path/to/just-ai-help/server/translate.js path/to/your-app/just-ai-help/config.json
 ```
 
 ### What you no longer configure

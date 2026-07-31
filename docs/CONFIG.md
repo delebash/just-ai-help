@@ -15,14 +15,28 @@ languages, your glossary and your product context.
 
 | | |
 |---|---|
-| lives | **in the app being translated**, beside its `package.json` |
-| named | `just-ai-help.config.json` by convention — any name works, you pass the path |
+| lives | **in the app being translated**, in a `just-ai-help/` folder at its root |
+| named | `config.json` — any name works, you pass the path |
 | read by | `server/translate.js`, `server/extract.js`, `server/server.js` |
 | committed | **yes** — a run without the config that produced it is an anecdote |
 | template | **[`config.example.json`](config.example.json)** — copy it, it is annotated |
 
 ```bash
-cp docs/config.example.json  path/to/your-app/just-ai-help.config.json
+mkdir path/to/your-app/just-ai-help
+cp docs/config.example.json  path/to/your-app/just-ai-help/config.json
+```
+
+**One folder is the whole footprint.** Everything the tool owns in a host app lives there, and
+deleting it leaves the app building and running in every language it already has — you lose only
+the translation memory. That is the test of whether the split is right:
+
+```
+your-app/
+  just-ai-help/
+    config.json          es.accepted.json    es.notes.json     ← committed
+    .jah.db              es.probe.json       .jah-cache.json   ← gitignored
+  src/…/i18n/locales/
+    en.json  es.json  fr.json                                  ← app assets, nothing else
 ```
 
 The example is not reproduced here on purpose. A second copy of it in this file is a second
@@ -46,7 +60,7 @@ The older key names still work, so upgrading does not invalidate a config.
 > **config file's own directory**, never the shell's. Run from anywhere:
 
 ```bash
-node path/to/just-ai-help/server/translate.js path/to/your-app/just-ai-help.config.json
+node path/to/just-ai-help/server/translate.js path/to/your-app/just-ai-help/config.json
 ```
 
 Until 2026-07-31 `localesDir` was resolved against the working directory. That is why every

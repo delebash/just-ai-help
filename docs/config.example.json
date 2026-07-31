@@ -1,20 +1,24 @@
 {
   "_why": "Copy this next to the strings it describes, then delete these underscore keys. FOUR fields, because everything else is either read from your en.json or lives in the review workspace. Run it from anywhere: every path resolves against THIS FILE, never the directory you are standing in.",
-
-  "locales": "src/i18n/locales",
-  "targets": ["es"],
+  "locales": "../src/i18n/locales",
+  "targets": [
+    "es"
+  ],
   "context": "a desktop app for managing recipes",
-  "glossary": ["Acme", "Smart Pantry", "PDF", "EPUB", "JSON", "tokens"],
-
-  "_locales": "Where en.json lives, relative to THIS file. Its folder is the locale folder and the filename is the source language, so neither needs stating. The older key name `localesDir` still works.",
+  "glossary": [
+    "Acme",
+    "Smart Pantry",
+    "PDF",
+    "EPUB",
+    "JSON",
+    "tokens"
+  ],
+  "_locales": "Where en.json lives, relative to THIS file. The config sits in <app>/just-ai-help/, so a locale folder at <app>/src/i18n/locales is \"../src/i18n/locales\". Its folder is the locale folder and its filename is the source language, so neither needs stating. The older key name `localesDir` still works.",
   "_targets": "The languages to produce. The one field that cannot be inferred — a language you do not have yet has no file to read.",
   "_context": "One sentence about your app, sent with EVERY request. UI strings are short and ambiguous: 'Beat' is a story beat, a musical beat, or to strike, and this is what makes the model choose. It cannot disambiguate one particular string — that is what a per-key note is for. Changing it invalidates the cache, because it changes every prompt.",
   "_glossary": "Brand names and identifiers. Shielded from the model by substitution, and exempted from the `untranslated` check. ONLY for terms that must never be translated ANYWHERE: every term is also written into the prompt as 'never translate these', and the model applies that to inflected forms the substitution never touches. Measured on a 1,965-key catalogue — adding `AI` turned 48 CORRECT translations into findings, because 'Exclude from AI' must become 'Excluir de la IA'. A word that is a label in one string and prose in another belongs in <lang>.accepted.json instead. A bare array or the older { doNotTranslate: [...] } shape both work.",
-
   "_inferred": "`placeholder` and `pluralSeparator` are READ FROM en.json and no longer need stating — whether you use {n} or {{n}}, and whether ' | ' separates plural forms, is visible in your own strings. State them only to override what was read. Every run prints what it inferred rather than deciding quietly.",
-
   "_engine": "Not here, normally. Which engine to use and your API key live in the review workspace as a CONNECTION, so a key is never in a committed file. The fields below still work for a headless CLI run, and since 2026-07-31 they are applied identically on BOTH paths — before that, an override set here was silently ignored by the workspace.",
-
   "_optional": {
     "engine": "a row name from server/config/engines.json, for a CLI run with no workspace connection",
     "model": "override the engine's model — required for a local server, whose model id is whatever YOU serve. Must be a pullable tag, e.g. hf.co/tencent/Hy-MT2-7B-GGUF:Q4_K_M, not a readable shorthand.",
@@ -22,7 +26,9 @@
     "think": "ollama only: false | true | 'low' | 'medium' | 'high'. A thinking model returns EMPTY content unless it is false. Match it to the model you named; do not set it globally out of habit.",
     "profile": "any other engine field, per project — batchSize, rateLimitMs, timeoutMs, maxOutputTokens, headers, extraBody",
     "sourceLanguage": "defaults to 'en'. Set it only if your source file is not en.json.",
-    "suspects": { "topN": 200 },
+    "suspects": {
+      "topN": 200
+    },
     "_suspects": "How many --probe disagreements to REPORT. A display budget, not engine time — --escalate is what costs. At topN 30 against 150 disagreements only 20% was visible, and the two real semantic defects ranked #22 and #30 of the thirty shown, so a small cut is not earned by the ranking. Set it above your disagreement count."
   }
 }
