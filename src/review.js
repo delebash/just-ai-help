@@ -16,6 +16,7 @@ import { createServer } from "node:http";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { acceptanceEntry, acceptanceHash, loadAccepted, partitionAccepted, saveAccepted } from "./accepted.js";
 import { buildContext, checkOne, runChecks } from "./checks.js";
 import { flatten, rebuild } from "./jsonutil.js";
 import { rankSuspects } from "./suspects.js";
@@ -52,7 +53,7 @@ const page = (lang) => `<!doctype html>
 </style></head><body>
 <header>
  <h1>just-ai-help review — <code>${lang}</code></h1>
- <span class="count"><b id="nflag">–</b> flagged / <b id="ntotal">–</b> keys, <b id="nfind">–</b> findings</span>
+ <span class="count"><b id="nflag">–</b> flagged / <b id="ntotal">–</b> keys, <b id="nfind">–</b> findings, <b id="nacc">–</b> accepted</span>
  <label class="filter"><input type="checkbox" id="only" checked> flagged only</label>
 </header>
 <main><table><thead><tr><th class="key">key</th><th class="src">source</th><th>translation — edits save on blur</th></tr></thead><tbody id="rows"></tbody></table></main>
@@ -69,8 +70,11 @@ function autosize(ta) {
 
 function chips(flags) {
   if (!flags.length) return '<div class="chips"><span class="chip" data-ok>ok</span></div>';
+  // "correct as-is" records the reviewer's verdict on THIS key's current findings. It is the
+  // same mechanism as the CLI's --accept flag; the sidecar is plain JSON either way.
   return '<div class="chips">' + flags.map(f =>
-    '<span class="chip" title="' + f.detail.replace(/"/g, '&quot;') + '">' + f.code + '</span>').join('') + '</div>';
+    '<span class="chip" title="' + f.detail.replace(/"/g, '&quot;') + '">' + f.code + '</span>').join('') +
+    '<button class="chip accept" title="These findings are correct output, not defects. Recorded in the accepted sidecar; comes back if the English or the translation changes.">correct as-is</button></div>';
 }
 
 function render() {
@@ -93,6 +97,7 @@ function render() {
   $('nflag').textContent = data.flagged;
   $('ntotal').textContent = data.total;
   $('nfind').textContent = data.findings;
+  $('nacc').textContent = data.accepted;
 }
 
 async function load() {
@@ -118,9 +123,30 @@ $('rows').addEventListener('blur', async (e) => {
   row.flags = out.flags;
   tr.className = out.flags.length ? 'flagged' : '';
   tr.querySelector('.chips').outerHTML = chips(out.flags);
-  data.flagged = out.flagged; data.findings = out.findings;
+  data.flagged = out.flagged; data.findings = out.findings; data.accepted = out.accepted;
   $('nflag').textContent = out.flagged; $('nfind').textContent = out.findings;
+  $('nacc').textContent = out.accepted;
 }, true);
+
+$('rows').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button.accept');
+  if (!btn) return;
+  const tr = btn.closest('tr');
+  const key = tr.dataset.key;
+  btn.disabled = true;
+  const res = await fetch('/api/accept', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ key })
+  });
+  const out = await res.json();
+  const row = data.rows.find(r => r.key === key);
+  if (row) row.flags = [];
+  tr.className = '';
+  tr.querySelector('.chips').outerHTML = chips([]);
+  data.flagged = out.flagged; data.findings = out.findings; data.accepted = out.accepted;
+  $('nflag').textContent = out.flagged; $('nfind').textContent = out.findings;
+  $('nacc').textContent = out.accepted;
+});
 
 $('rows').addEventListener('input', (e) => { if (e.target.tagName === 'TEXTAREA') autosize(e.target); });
 $('only').addEventListener('change', render);
@@ -149,6 +175,9 @@ export function createReviewServer({ configPath, lang: langArg } = {}) {
 	// disagree the model was unsure, which is the only signal we have for defects no
 	// structural check can see (suspects.js). Absent file = the feature is simply off.
 	const probeFile = join(localesDir, `${lang}.probe.json`);
+	// Committed, unlike the probe sidecar: a reviewer verdict is a project decision, not a
+	// measurement. See accepted.js.
+	const acceptedFile = join(localesDir, `${lang}.accepted.json`);
 
 	/**
 	 * Writes one key back. The nested structure is rebuilt from the SOURCE file's shape, so
@@ -177,7 +206,7 @@ export function createReviewServer({ configPath, lang: langArg } = {}) {
 	function buildRows() {
 		const sourceFlat = flatten(readSourceRaw());
 		const targetFlat = readTargetFlat();
-		const findings = runChecks({ sourceFlat, targetFlat, ctx });
+		let findings = runChecks({ sourceFlat, targetFlat, ctx });
 		if (existsSync(probeFile)) {
 			// Re-read every call: the reviewer's edits change what disagrees, and a suspect
 			// they have already rewritten should stop being one.
@@ -190,6 +219,11 @@ export function createReviewServer({ configPath, lang: langArg } = {}) {
 				}),
 			);
 		}
+
+		// The reviewer's own verdicts come off last, so a "correct as-is" clears a suspect as
+		// well as a check. The page still shows the count — never a silent suppression.
+		const split = partitionAccepted(findings, loadAccepted(acceptedFile), sourceFlat, targetFlat);
+		findings = split.findings;
 
 		const byKey = new Map();
 		for (const f of findings) {
@@ -205,7 +239,7 @@ export function createReviewServer({ configPath, lang: langArg } = {}) {
 		}));
 		// Flagged first — a review session should start with the work, not scroll to it.
 		rows.sort((a, b) => b.flags.length - a.flags.length || a.key.localeCompare(b.key));
-		return { rows, flagged: byKey.size, total: rows.length, findings: findings.length };
+		return { rows, flagged: byKey.size, total: rows.length, findings: findings.length, accepted: split.accepted.length };
 	}
 
 	const server = createServer(async (req, res) => {
@@ -234,8 +268,37 @@ export function createReviewServer({ configPath, lang: langArg } = {}) {
 				code: f.code,
 				detail: f.detail,
 			}));
-			const { flagged, findings } = buildRows();
-			return json(res, 200, { key: parsed.key, flags, flagged, findings });
+			const { flagged, findings, accepted } = buildRows();
+			return json(res, 200, { key: parsed.key, flags, flagged, findings, accepted });
+		}
+		// "Correct as-is" — the reviewer's verdict on the findings a key currently raises.
+		// Same mechanism as `--accept` on the CLI, and deliberately not the only way in: the
+		// sidecar is plain JSON, so the page is a convenience over it, never a gatekeeper.
+		if (req.url === "/api/accept" && req.method === "POST") {
+			let body = "";
+			for await (const chunk of req) body += chunk;
+			let parsed;
+			try {
+				parsed = JSON.parse(body);
+			} catch {
+				return json(res, 400, { error: "bad JSON" });
+			}
+			if (typeof parsed?.key !== "string") return json(res, 400, { error: "key must be a string" });
+			const sourceFlat = flatten(readSourceRaw());
+			if (!(parsed.key in sourceFlat)) return json(res, 404, { error: `no such key: ${parsed.key}` });
+
+			const targetFlat = readTargetFlat();
+			// Unfiltered on purpose: accepting is about what the checks say RIGHT NOW, so a
+			// second click on an already-accepted key is a visible no-op rather than a fake success.
+			const raw = runChecks({ sourceFlat, targetFlat, ctx }).filter((f) => f.key === parsed.key);
+			const store = loadAccepted(acceptedFile);
+			for (const f of raw) {
+				const entry = acceptanceEntry({ key: f.key, code: f.code, src: sourceFlat[f.key] ?? "", dst: targetFlat[f.key] ?? "" });
+				store[acceptanceHash(entry)] = entry;
+			}
+			saveAccepted(acceptedFile, store);
+			const { flagged, findings, accepted } = buildRows();
+			return json(res, 200, { key: parsed.key, recorded: raw.length, flagged, findings, accepted });
 		}
 		json(res, 404, { error: "not found" });
 	});

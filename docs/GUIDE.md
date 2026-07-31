@@ -18,7 +18,7 @@ it does; this page just tells you what to run.
 node --version      # v20+
 git clone <this repo>
 cd just-ai-help
-npm test            # 65 tests, should all pass
+npm test            # 75 tests, should all pass
 ```
 
 ---
@@ -125,6 +125,7 @@ Edit the copy:
 node src/translate.js config.json                  # 1. translate what changed, then check
 node src/translate.js config.json --probe          # 2. (optional) second opinion on meaning
 node src/review.js    config.json --lang es        # 3. fix what got flagged
+node src/translate.js config.json --accept <key>   # 3b. mark a flag as correct, not a defect
 node src/translate.js config.json --check-only     # 4. in CI: verify, no engine needed
 ```
 
@@ -142,6 +143,30 @@ why it is opt-in. Set the budget with `"suspects": { "topN": 20 }`.
 **3 — Review.** Opens `http://localhost:4780`. Flagged rows are pinned to the top with the
 reason attached; edit in the box, it saves when you click away and re-checks that key. The
 JSON files are the only state — no database, no account. You can also just edit the JSON.
+
+**3b — Some flags are not defects.** In Spanish the correct translation of "No" is "No", and
+`untranslated` will say so every single run. Left alone, that means a *perfect* catalogue can
+never pass `--check-only` — and a gate that cannot go green is a gate people stop reading. So
+when a finding is correct output, record that verdict: press **correct as-is** on the row, or
+run `--accept`:
+
+```bash
+node src/translate.js config.json --accept common.no,settings.sections.general
+```
+
+Either way it lands in `<lang>.accepted.json` next to your locale files. **Commit that file** —
+it is a project decision, not a measurement.
+
+Three things worth knowing about it:
+
+- It is **per finding, not per key.** Accepting `untranslated` on a key does not silence a
+  placeholder bug that shows up there later.
+- It **expires by itself.** The entry is keyed by a hash of the English *and* the translation,
+  so if either changes the finding comes straight back. Change `"General"` to
+  `"General settings"` and forget to translate it, and you get told.
+- It is **never silent.** Every run prints `N accepted as correct`, at zero or otherwise.
+
+To un-accept something, delete its entry from the file.
 
 **4 — CI.** `--check-only` re-runs every check against the files already committed. No engine,
 no network, no API key. It exits non-zero if anything is wrong.
@@ -195,6 +220,13 @@ entries automatically, but hand-editing the JSON does not. Delete that key from
 **Everything is flagged `untranslated`** — check that your `sourceLanguage` and `targets` are
 not the same, and that your glossary is not swallowing the whole string.
 
-**A correct translation is flagged anyway** — some checks report a false positive on strings
-that are the same word in both languages (`· {n} tokens`). Read the flagged string before
-believing the count; the flags are a worklist, not a verdict.
+**A correct translation is flagged anyway** — two different causes, two different fixes.
+
+If it is a *brand or technical term* (`Tauri`, `Vue 3 + Pinia`, a model id, `tokens`), add it to
+`glossary.doNotTranslate`. That is not a workaround: it also shields the term from the model
+during translation, which is what you wanted anyway. On the JustWrite catalogue this alone took
+`untranslated` from 11 findings to 7.
+
+If it is a *word that is genuinely the same in both languages* — Spanish `No`, `Error`, `ID`,
+`total` — that is a judgement only you can make, so make it once with **correct as-is** or
+`--accept` (see step 3b). The flags are a worklist, not a verdict.

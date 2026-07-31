@@ -47,7 +47,7 @@ async function withServer(run) {
 	await new Promise((r) => server.listen(0, "127.0.0.1", r));
 	const base = `http://127.0.0.1:${server.address().port}`;
 	try {
-		await run({ base, esPath: join(locales, "es.json") });
+		await run({ base, esPath: join(locales, "es.json"), enPath: join(locales, "en.json"), locales });
 	} finally {
 		await new Promise((r) => server.close(r));
 	}
@@ -133,5 +133,68 @@ test("POST /api/save rejects a bad body and an unknown key", async () => {
 test("unknown routes 404", async () => {
 	await withServer(async ({ base }) => {
 		assert.equal((await fetch(`${base}/nope`)).status, 404);
+	});
+});
+
+test("POST /api/accept records the key's findings and stops them counting", async () => {
+	await withServer(async ({ base, locales }) => {
+		// chapters.dialogs.deleteTitle is missing its ¿ — a real startpunc flag.
+		const before = await (await fetch(`${base}/api/data`)).json();
+		assert.ok(before.findings > 0);
+		assert.equal(before.accepted, 0);
+
+		const res = await fetch(`${base}/api/accept`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ key: "chapters.dialogs.deleteTitle" }),
+		});
+		const out = await res.json();
+		assert.equal(res.status, 200);
+		assert.ok(out.recorded >= 1);
+		assert.equal(out.findings, before.findings - out.recorded);
+		// Never silent: the count is part of the payload the header renders.
+		assert.equal(out.accepted, out.recorded);
+
+		// And it is on disk, readable, for whoever finds it in a diff.
+		const sidecar = JSON.parse(readFileSync(join(locales, "es.accepted.json"), "utf8"));
+		assert.ok(sidecar._why.length > 0);
+		const entry = Object.values(sidecar).find((x) => typeof x === "object");
+		assert.equal(entry.key, "chapters.dialogs.deleteTitle");
+	});
+});
+
+test("BITES: an acceptance does not survive an edit to the translation", async () => {
+	await withServer(async ({ base, locales }) => {
+		await fetch(`${base}/api/accept`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ key: "chapters.dialogs.deleteTitle" }),
+		});
+		const cleared = await (await fetch(`${base}/api/data`)).json();
+		const row = cleared.rows.find((r) => r.key === "chapters.dialogs.deleteTitle");
+		assert.deepEqual(row.flags, [], "accepted, so quiet");
+
+		// The reviewer now edits it into a DIFFERENT wrong answer. The old verdict was about the
+		// old string and must not carry over to this one.
+		await fetch(`${base}/api/save`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ key: "chapters.dialogs.deleteTitle", value: "Eliminar este capitulo?" }),
+		});
+		const after = await (await fetch(`${base}/api/data`)).json();
+		const again = after.rows.find((r) => r.key === "chapters.dialogs.deleteTitle");
+		assert.ok(again.flags.length > 0, "an edited target must be re-checked from scratch");
+		assert.equal(after.accepted, 0);
+	});
+});
+
+test("POST /api/accept 404s an unknown key rather than writing junk", async () => {
+	await withServer(async ({ base }) => {
+		const res = await fetch(`${base}/api/accept`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ key: "no.such.key" }),
+		});
+		assert.equal(res.status, 404);
 	});
 });

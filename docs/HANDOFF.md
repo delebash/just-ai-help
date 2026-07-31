@@ -252,6 +252,52 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
    (`engines_api.py:98`) and no UI code ever read it, while `docs/engines.md` and a comment in
    `models.py` both claimed it was on screen. Now rendered as a pill on the Engines card.
 
+## 2026-07-30, later — accepted findings: the gate can now reach green
+
+**The problem, measured.** Across the two catalogue runs the checks separated sharply by
+precision: `spurious-interrogative` 11 findings / 11 real, `startpunc` 1/1, `endpunc` 5/0 (all
+duplicates), `brackets` 1/0, and **`untranslated` 20 findings / 1 real**. The consequence is
+worse than noise: `"No"` is correct Spanish for `"No"`, so a PERFECT catalogue could never exit
+0 — and `--check-only` is THE CI gate. A gate that cannot go green is one people stop reading.
+
+**Fix 1 — glossary hygiene, zero code.** `checkUntranslated` already exempts strings that are
+only placeholders, glossary terms, digits and punctuation; that mechanism was starved of data,
+not broken. Adding `Tauri`, `Vue`, `Pinia`, the model ids and `tokens` to `doNotTranslate` took
+the check from **11 findings to 7** on the 867-key run, and shields those terms during
+translation too. Measured, not projected.
+
+**Fix 2 — `src/accepted.js`, a reviewer verdict that expires.** The remaining seven were Spanish
+cognates (`No`, `General`, `App`, `Error`, `ID`, `auto`, `total`). They are now cleared by
+`--accept <key[,key…]>` or the review page's **correct as-is** button, into a committed
+`<lang>.accepted.json`. An entry is hashed over **(key, code, source, target)**, which is the
+whole design:
+
+- accepting `untranslated` on a key does not silence `brackets` on it;
+- change the English **or** the translation and the finding comes back;
+- the count is printed on every run, so no suppression is invisible.
+
+End state on the 867-key data: **14 findings → 2, and both survivors are real defects**
+(`characters.sweepPrompt.message` lost its `¿`/`?`, `…whoKnows.hint` gained a spurious one),
+with `8 accepted as correct` printed alongside.
+
+**The expiry was proven on the real catalogue, not just in a fixture.** With
+`settings.sections.general` accepted, changing the source to `"General settings"` and leaving
+the target unchanged put `untranslated (1)` straight back in the report. A per-key exemption
+list — which was the FIRST design — would have hidden that forever.
+
+**Why not a per-language list of identical words.** That first design was wrong twice: it only
+ever fixed one check (the benign `brackets` gloss needs the same disposal), and it meant writing
+lexical claims from memory into `conventions.json`, the one file that warns, about itself, that
+this is "exactly how a confident wrong rule ends up applied to every future translation."
+
+**Also committed: `justwrite-app/just-ai-help.config.json`.** Both previous catalogue runs were
+unreproducible because their config was never kept. It now lives beside the catalogue it
+describes, with the grown glossary.
+
+**The review page has finally been run.** Its `/api/accept` endpoint, the button and the
+counter are exercised by tests, and the server was driven live against the 867-key data:
+40 flagged → accept → 39, counters update, unknown key 404s. 75 tests, up from 65.
+
 ## USER-OWNED — never do these unasked
 
 Pushing any repo · any PR to the i18n-ai-translate upstream · shipping `es.json` into JustWrite

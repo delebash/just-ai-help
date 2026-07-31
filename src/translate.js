@@ -24,9 +24,17 @@
 //                                                         cannot see (see suspects.js)
 //                          --escalate <profile>           re-translate ONLY the flagged keys
 //                                                         with a stronger engine profile
+//                          --accept <key[,key…]>          record this key's CURRENT findings as
+//                                                         reviewed-and-correct in
+//                                                         <lang>.accepted.json — no engine call
+//
+// On --accept and the accepted sidecar, read src/accepted.js. The short version: some findings
+// are correct output ("No" -> "No" in Spanish), so without a way to clear them a PERFECT
+// catalogue can never exit 0 — and --check-only is the CI gate.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { acceptanceEntry, acceptanceHash, loadAccepted, partitionAccepted, saveAccepted } from "./accepted.js";
 import { buildContext, runChecks, summarise } from "./checks.js";
 import { flatten, rebuild } from "./jsonutil.js";
 import { effectiveTemperature, translateLanguage } from "./loop.js";
@@ -48,7 +56,14 @@ const force = argv.includes("--force");
 const probe = argv.includes("--probe");
 const escalateTo = argv.includes("--escalate") ? argv[argv.indexOf("--escalate") + 1] : null;
 const escalateIdx = escalateTo ? argv.indexOf("--escalate") + 1 : -1;
-const configPath = argv.find((a, i) => !a.startsWith("--") && i !== escalateIdx) || "just-ai-help.config.json";
+// --accept records the CURRENT findings for one or more keys as reviewed-and-correct. It calls
+// no engine — it is a check-time verdict, so it runs the same checks --check-only does and then
+// writes what they found for those keys into the sidecar. Comma-separated so one flag covers a
+// triage batch without complicating the config-path scan below.
+const acceptArg = argv.includes("--accept") ? argv[argv.indexOf("--accept") + 1] : null;
+const acceptIdx = acceptArg ? argv.indexOf("--accept") + 1 : -1;
+const acceptKeys = acceptArg ? acceptArg.split(",").map((k) => k.trim()).filter(Boolean) : [];
+const configPath = argv.find((a, i) => !a.startsWith("--") && i !== escalateIdx && i !== acceptIdx) || "just-ai-help.config.json";
 
 if (!existsSync(configPath)) {
 	console.error(`No config at ${configPath}`);
@@ -148,6 +163,8 @@ async function translateInto(
 
 /** Where the --probe pass keeps its second opinion for one language. */
 const probePath = (lang) => join(localesDir, `${lang}.probe.json`);
+/** Where a language's reviewer verdicts live. Committed, unlike the probe sidecar — see accepted.js. */
+const acceptedPath = (lang) => join(localesDir, `${lang}.accepted.json`);
 
 /**
  * EVERY finding for one language: the structural checks, plus the disagreement suspects
@@ -156,18 +173,61 @@ const probePath = (lang) => join(localesDir, `${lang}.probe.json`);
  * the report showed you.
  */
 function allFindings(lang, targetFlat) {
-	const findings = runChecks({ sourceFlat: src, targetFlat, ctx: buildContext(cfg, conventions, lang) });
+	let findings = runChecks({ sourceFlat: src, targetFlat, ctx: buildContext(cfg, conventions, lang) });
 	const p = probePath(lang);
-	if (!existsSync(p)) return findings;
-	return [
-		...findings,
-		...rankSuspects({
-			sourceFlat: src,
-			targetFlat,
-			probeFlat: flatten(JSON.parse(readFileSync(p, "utf8"))),
-			topN: cfg.suspects?.topN ?? 20,
-		}),
-	];
+	if (existsSync(p)) {
+		findings = [
+			...findings,
+			...rankSuspects({
+				sourceFlat: src,
+				targetFlat,
+				probeFlat: flatten(JSON.parse(readFileSync(p, "utf8"))),
+				topN: cfg.suspects?.topN ?? 20,
+			}),
+		];
+	}
+	// Reviewer verdicts come off LAST, so an acceptance can clear a suspect as well as a check
+	// — and so --escalate never spends engine time re-doing a key a human already signed off.
+	return partitionAccepted(findings, loadAccepted(acceptedPath(lang)), src, targetFlat);
+}
+
+if (acceptKeys.length) {
+	// A verdict, not a translation: run the checks on what is already on disk and store what
+	// they say about these keys. Deliberately CLI-first rather than review-page-only — the
+	// sidecar is just JSON, and making the mechanism reachable without a browser is what keeps
+	// it testable and keeps a reviewer unblocked if the page needs work.
+	let recorded = 0;
+	for (const lang of cfg.targets) {
+		const outPath = join(localesDir, `${lang}.json`);
+		if (!existsSync(outPath)) {
+			console.error(`${lang}: nothing to accept — no ${lang}.json yet.`);
+			process.exitCode = 1;
+			continue;
+		}
+		const dst = flatten(JSON.parse(readFileSync(outPath, "utf8")));
+		const path = acceptedPath(lang);
+		const store = loadAccepted(path);
+		// Re-run the checks WITHOUT the acceptance filter: accepting is about what the checks
+		// currently say, and filtering first would make a second --accept on the same key a no-op
+		// that looks like success.
+		const raw = runChecks({ sourceFlat: src, targetFlat: dst, ctx: buildContext(cfg, conventions, lang) });
+		for (const key of acceptKeys) {
+			const forKey = raw.filter((f) => f.key === key);
+			if (!forKey.length) {
+				console.log(`${lang}: ${key} — no current findings, nothing to accept`);
+				continue;
+			}
+			for (const f of forKey) {
+				const entry = acceptanceEntry({ key, code: f.code, src: src[key] ?? "", dst: dst[key] ?? "" });
+				store[acceptanceHash(entry)] = entry;
+				console.log(`${lang}: accepted ${f.code} on ${key}`);
+				recorded++;
+			}
+		}
+		saveAccepted(path, store);
+	}
+	console.log(`\n${recorded} finding(s) recorded as reviewed. Commit ${cfg.targets.map((l) => `${l}.accepted.json`).join(", ")}.`);
+	process.exit(process.exitCode ?? 0);
 }
 
 if (escalateTo) {
@@ -189,9 +249,9 @@ if (escalateTo) {
 		const ctx = buildContext(cfg, conventions, lang);
 		// allFindings, not runChecks: escalation covers the structural flags AND the probe's
 		// suspects — "everything flagged plus the top N" (the user's ruling, 2026-07-28).
-		const before = allFindings(lang, flatten(JSON.parse(readFileSync(outPath, "utf8"))));
+		const { findings: before, accepted: beforeOk } = allFindings(lang, flatten(JSON.parse(readFileSync(outPath, "utf8"))));
 		const keys = [...new Set(before.map((f) => f.key))];
-		console.log(`${lang}: ${before.length} finding(s) across ${keys.length} key(s) before`);
+		console.log(`${lang}: ${before.length} finding(s) across ${keys.length} key(s) before${beforeOk.length ? ` (${beforeOk.length} accepted, not escalated)` : ""}`);
 		if (!keys.length) continue;
 
 		const subset = Object.fromEntries(keys.map((k) => [k, src[k]]));
@@ -209,7 +269,7 @@ if (escalateTo) {
 			for (const k of keys) delete probeFlat[k];
 			writeFileSync(pp, `${JSON.stringify(rebuild(sourceRaw, probeFlat), null, 2)}\n`);
 		}
-		const after = allFindings(lang, merged);
+		const { findings: after } = allFindings(lang, merged);
 		console.log(`${lang}: ${before.length} -> ${after.length} finding(s), ${keys.length} -> ${new Set(after.map((f) => f.key)).size} key(s)`);
 	}
 	console.log(`Elapsed ${((Date.now() - started) / 1000).toFixed(1)}s`);
@@ -279,7 +339,7 @@ for (const lang of cfg.targets) {
 		continue;
 	}
 	const dst = flatten(JSON.parse(readFileSync(outPath, "utf8")));
-	const findings = allFindings(lang, dst);
+	const { findings, accepted: acceptedNow } = allFindings(lang, dst);
 	const translated = Object.keys(src).filter((k) => dst[k]).length;
 
 	console.log(`\n${lang}: ${translated}/${Object.keys(src).length} translated`);
@@ -295,6 +355,11 @@ for (const lang of cfg.targets) {
 		console.log(`  ${code} (${list.length})${note}: ${keys.slice(0, 8).join(", ")}${keys.length > 8 ? " …" : ""}`);
 	}
 	if (!findings.length) console.log("  all checks passed");
+	// ALWAYS printed, even at zero. Suppression you cannot see is the bug this project exists
+	// to prevent; an accepted finding is hidden from the exit code, never from the reader.
+	if (acceptedNow.length) {
+		console.log(`  ${acceptedNow.length} accepted as correct (in ${lang}.accepted.json), not counted`);
+	}
 }
 // Set the code, don't call process.exit(). Exiting hard while an I/O handle is still
 // closing is what tripped a libuv assertion here on 2026-07-27, turning a clean pass into

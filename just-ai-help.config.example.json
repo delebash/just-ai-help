@@ -8,7 +8,8 @@
 
   "context": "a desktop app for managing recipes",
   "glossary": {
-    "doNotTranslate": ["Acme", "Smart Pantry"]
+    "_why": "Brand names AND technical identifiers. Both get shielded from the model, and both stop `untranslated` flagging a string that correctly came back unchanged — on a real catalogue, listing the tech terms took that check from 11 findings to 7 with no code change.",
+    "doNotTranslate": ["Acme", "Smart Pantry", "PDF", "EPUB", "JSON", "tokens"]
   },
 
   "engine": "ollama",

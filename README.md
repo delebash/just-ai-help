@@ -35,10 +35,11 @@ node src/translate.js config.json --check-only       # check the files on disk. 
 node src/translate.js config.json --force            # re-translate everything
 node src/translate.js config.json --probe             # translate twice, flag where they disagree
 node src/translate.js config.json --escalate <prof>   # re-run ONLY the flagged keys, elsewhere
+node src/translate.js config.json --accept <key,key>  # record findings as reviewed-and-correct
 node src/extract.js   config.json                     # docs front-matter -> locale keys
 node src/extract.js   config.json --check             # CI: fail if those keys are stale
 node src/review.js    config.json --lang es           # the review page
-npm test                                               # node --test, 65 tests, no deps
+npm test                                               # node --test, 75 tests, no deps
 ```
 
 > **Just want to use it?** [`docs/GUIDE.md`](docs/GUIDE.md) is the short version — which model
@@ -97,7 +98,7 @@ were written and asserts:
 | `plural-halves-lost` | a plural form disappeared |
 | `plural-halves-identical` | both halves came back the same |
 | `glossary-translated` | a `doNotTranslate` term was translated anyway |
-| `untranslated` | identical to the source (exempting strings that are only placeholders and glossary terms) |
+| `untranslated` | identical to the source (exempting strings that are only placeholders and glossary terms, and anything a reviewer has accepted — see `--accept`) |
 | `startpunc` | the target language's opening mark is missing — Spanish `¿` / `¡` |
 | `endpunc` | terminal punctuation does not match the source's |
 | `numbers` | a quantity changed |
@@ -204,6 +205,62 @@ blur, re-runs the checks for that key and updates the counts. Saving one value l
 file byte-identical except that value (the nested structure is rebuilt from the *source*
 file's shape, so key order never churns) — a one-word fix produces a one-line diff, which is
 what makes reviewing a reviewer's work possible. There is a test for exactly that.
+
+### Some findings are correct — `--accept`
+
+Not every flag is a defect. The correct Spanish for `"No"` is `"No"`, and `untranslated` will
+say so on every run, forever. Left alone that has a consequence worse than noise: **a perfect
+catalogue can never exit 0**, and `--check-only` is the CI gate. A gate that cannot go green is
+one people stop reading, which is precisely how the next real miss ships.
+
+Measured on the JustWrite catalogue, 2026-07-30 — across two full runs the checks separated
+sharply by precision:
+
+| check | findings | real errors |
+|---|---|---|
+| `spurious-interrogative` | 11 | **11** |
+| `startpunc` | 1 | **1** |
+| `brackets` | 1 | 0 (a benign added gloss) |
+| `endpunc` | 5 | 0 (every one a duplicate of a `spurious-interrogative` hit) |
+| `untranslated` | 20 | **1** |
+
+Two fixes, in this order, because the first is free:
+
+**1. Put technical terms in the glossary.** `checkUntranslated` already exempts a string that is
+only placeholders, glossary terms, digits and punctuation — that mechanism was starved of data,
+not broken. Adding `Tauri`, `Vue`, `Pinia`, the model ids and `tokens` to `doNotTranslate` took
+`untranslated` from 11 findings to 7 with no code change, and shields those terms during
+translation too.
+
+**2. Record a verdict on what is left.** The remaining seven were Spanish cognates — `No`,
+`General`, `App`, `Error`, `ID`, `auto`, `total`. Press **correct as-is** in the review page, or:
+
+```bash
+node src/translate.js config.json --accept common.no,settings.sections.general
+```
+
+Either writes `<lang>.accepted.json` beside the locale files. Commit it: a reviewer's judgement
+is a project decision, not a measurement, which is why it is committed where `<lang>.probe.json`
+is not.
+
+**Why a hash and not a list of exempt keys.** An entry is keyed by a hash of *(key, code, source,
+target)*, and every part of that is load-bearing:
+
+- Accepting `untranslated` on a key does not silence `brackets` on the same key.
+- Change the English and the finding **comes back**. Demonstrated on the real catalogue: with
+  `settings.sections.general` accepted, editing the source to `"General settings"` and leaving
+  the target unchanged put `untranslated (1)` straight back in the report. A per-key exemption
+  list would have hidden that forever — which is exactly why this is not one.
+- Edit the translation and it comes back too. The verdict was about those two exact strings.
+
+And it is never silent: every run prints `N accepted as correct`, so a suppression is always
+visible to whoever reads the report. To un-accept, delete the entry.
+
+**What this deliberately is not** is a per-language list of "words that are identical in
+Spanish". That was the first design and it was wrong twice over: it only ever fixed one check
+(the benign `brackets` gloss above needs the same disposal), and `conventions.json` already
+warns, about itself, that language rules written from memory are "exactly how a confident wrong
+rule ends up applied to every future translation."
 
 ### Or just edit the JSON
 
