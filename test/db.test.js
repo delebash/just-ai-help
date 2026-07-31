@@ -16,7 +16,8 @@
 // node --test, zero dependencies.
 
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -172,28 +173,41 @@ test("a connection with no key contributes nothing to the environment", () => {
 	assert.deepEqual(env, {});
 });
 
-test("REFUSES to store a key when .gitignore does not cover the database", () => {
+test("REFUSES to store a key when git does not ignore the database", () => {
+	// A real repo, so git can answer. tmp dirs are not repos, and "not a repo" is a different
+	// branch entirely (there is nothing to commit a key into).
 	const root = tmp();
-	writeFileSync(join(root, ".gitignore"), "node_modules/\n*.log\n");
-	assert.throws(() => assertGitignored(root, DB_FILE), /does not cover/, "a bare .gitignore must be rejected");
+	execFileSync("git", ["init", "-q"], { cwd: root });
+	writeFileSync(join(root, ".gitignore"), ["node_modules/", "*.log", ""].join("\n"));
+	assert.throws(() => assertGitignored(root, DB_FILE), /does not ignore/);
 });
 
-test("REFUSES to store a key when there is no .gitignore at all", () => {
-	assert.throws(() => assertGitignored(tmp(), DB_FILE), /no \.gitignore/);
+test("ACCEPTS a database ignored by a PARENT directory's rule", () => {
+	// The case my hand-written parser got WRONG, measured 2026-07-31: .evidence/ is ignored
+	// wholesale at the repo root, so git considers .evidence/proj/.jah.db ignored — while a
+	// parser reading only .evidence/proj/.gitignore (which does not exist) refused. Real
+	// gitignore semantics span parents, negation and globs; git owns those rules, so ask git.
+	const root = tmp();
+	execFileSync("git", ["init", "-q"], { cwd: root });
+	writeFileSync(join(root, ".gitignore"), ["evidence/", ""].join("\n"));
+	const nested = join(root, "evidence", "run-1");
+	mkdirSync(nested, { recursive: true });
+	assert.equal(assertGitignored(nested, DB_FILE), true, "a parent rule counts — it is what git says");
 });
 
-test("accepts a .gitignore that names the database, and one that globs it", () => {
+test("accepts an explicit line and a glob", () => {
 	for (const line of [DB_FILE, `/${DB_FILE}`, "*.db"]) {
 		const root = tmp();
-		writeFileSync(join(root, ".gitignore"), `node_modules/\n${line}\n`);
-		assert.equal(assertGitignored(root, DB_FILE), true, `"${line}" should count as covering it`);
+		execFileSync("git", ["init", "-q"], { cwd: root });
+		writeFileSync(join(root, ".gitignore"), ["node_modules/", line, ""].join("\n"));
+		assert.equal(assertGitignored(root, DB_FILE), true, `"${line}" should count`);
 	}
 });
 
-test("a comment mentioning the file does not count as ignoring it", () => {
-	const root = tmp();
-	writeFileSync(join(root, ".gitignore"), `# remember to ignore ${DB_FILE}\nnode_modules/\n`);
-	assert.throws(() => assertGitignored(root, DB_FILE), /does not cover/);
+test("outside a git repo it passes, and SAYS WHY rather than passing silently", () => {
+	const out = assertGitignored(tmp(), DB_FILE);
+	assert.equal(out.ok, true);
+	assert.match(out.reason, /not a git repository/, "a silent pass is the assumption this guard exists to prevent");
 });
 
 test("a SECOND open migrates rather than clobbers — a review survives a restart", () => {

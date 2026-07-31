@@ -134,6 +134,16 @@ export function proposals(db, { lang, key = null }) {
 	return rows.map((r) => ({ lang: r.lang, key: r.key, engine: r.engine, value: r.value, at: r.at }));
 }
 
+/**
+ * The set of keys with something staged, in ONE query.
+ *
+ * buildRows previously called proposals() once per flagged row — 154 round trips to answer a
+ * yes/no per row. Same answer, one statement.
+ */
+export function proposalKeys(db, lang) {
+	return new Set(db.prepare("SELECT DISTINCT key FROM proposals WHERE lang = ?").all(lang).map((r) => r.key));
+}
+
 /** How many keys have something waiting — the badge on "review proposals". */
 export function proposalCount(db, lang) {
 	return db.prepare("SELECT COUNT(DISTINCT key) AS n FROM proposals WHERE lang = ?").get(lang).n;

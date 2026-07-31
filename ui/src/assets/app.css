@@ -14,7 +14,7 @@ body {
 .shell { display: flex; flex-direction: column; height: 100%; }
 
 /* ── header ───────────────────────────────────────────────── */
-.topbar {
+.topbar { position: relative;
   display: flex; align-items: center; gap: 14px;
   padding: 8px 14px;
   background: var(--surface);

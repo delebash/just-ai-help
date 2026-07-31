@@ -15,6 +15,7 @@
 // node --test, zero dependencies.
 
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,8 +41,11 @@ async function withServer(run, { targets = ["es"] } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), "jah-ws-"));
 	const locales = join(dir, "locales");
 	mkdirSync(locales, { recursive: true });
-	// The guard refuses to store a key unless the store is genuinely ignored.
-	writeFileSync(join(dir, ".gitignore"), "node_modules/\n.jah.db\n");
+	// A REAL git repo, because the key guard asks `git check-ignore` rather than parsing
+	// .gitignore itself. Outside a repo the guard takes a different branch entirely — there is
+	// nothing to commit a key into — so testing it in a non-repo tested nothing.
+	execFileSync("git", ["init", "-q"], { cwd: dir });
+	writeFileSync(join(dir, ".gitignore"), ["node_modules/", ".jah.db", ""].join("\n"));
 	writeFileSync(
 		join(dir, "config.json"),
 		JSON.stringify({
@@ -202,12 +206,12 @@ test("A KEY IS NEVER RETURNED BY THE ENGINES ENDPOINT", async () => {
 	});
 });
 
-test("STORING A KEY REFUSES when .gitignore does not cover the database", async () => {
+test("STORING A KEY REFUSES when git does not ignore the database", async () => {
 	await withServer(async ({ api, dir }) => {
-		writeFileSync(join(dir, ".gitignore"), "node_modules/\n"); // the guard's line removed
+		writeFileSync(join(dir, ".gitignore"), ["node_modules/", ""].join("\n")); // the guard's line removed
 		const res = await api("PUT", "/api/engines/connection", { label: "groq", provider: "groq", apiKey: "sk-nope" });
 		assert.equal(res.status, 400);
-		assert.match(res.body.error, /does not cover/);
+		assert.match(res.body.error, /does not ignore/);
 	});
 });
 
@@ -345,5 +349,110 @@ test("EDITING A KEY DROPS ITS CACHED SECOND OPINION — stale advice must not li
 		await api("POST", "/api/save", { lang: "es", key: "settings.save", value: "Guardar todo" });
 		const res = await api("GET", "/api/reference?lang=es&key=settings.save");
 		assert.equal(res.body.cached, null, "the reading was about the old text");
+	});
+});
+
+// ── The two journeys that were broken, and that 148 unit tests missed ────────────────────
+//
+// Both features were built and unit-tested in isolation, and both were dead end to end.
+// buildUserMessage() had a passing test; nothing asserted a JOB reached it. Undo had a
+// passing test; nothing undid an edit on a key that started with no translation.
+//
+// These follow the whole path on purpose. A test that pokes one function proves that
+// function works, and nothing about whether anyone calls it.
+
+test("A NOTE WRITTEN IN THE UI REACHES THE MODEL — the whole point of notes", async () => {
+	await withServer(async ({ api, server }) => {
+		await api("PUT", "/api/notes", { lang: "es", key: "characterAudit.why", note: "a label, not a question" });
+
+		// Intercept at the engine boundary: whatever the job hands the translate function IS
+		// what the model would see.
+		let sawCfg = null;
+		const { jobs } = server.jah;
+		const realStart = jobs.start.bind(jobs);
+		jobs.start = (opts) => realStart({ ...opts, translate: async ({ cfg }) => {
+			sawCfg = cfg;
+			return { values: {}, failed: [], requests: 0 };
+		} });
+
+		await api("POST", "/api/jobs", { lang: "es", scope: "keys", keys: ["characterAudit.why"] });
+		await jobs.settled();
+
+		assert.ok(sawCfg, "the job ran");
+		assert.equal(
+			sawCfg.notes?.["characterAudit.why"],
+			"a label, not a question",
+			"a note is useless if pressing re-translate on that very key does not send it",
+		);
+	});
+});
+
+test("UNDOING AN EDIT ON AN UNTRANSLATED KEY REMOVES IT — it does not leave an empty string", async () => {
+	await withServer(async ({ api, locales, esPath }) => {
+		// A key present in English with no Spanish yet.
+		const en = JSON.parse(readFileSync(join(locales, "en.json"), "utf8"));
+		en.settings.brandNew = "Brand new";
+		writeFileSync(join(locales, "en.json"), `${JSON.stringify(en, null, 2)}\n`);
+
+		const before = readFileSync(esPath, "utf8");
+		await api("POST", "/api/save", { lang: "es", key: "settings.brandNew", value: "Recién añadido" });
+		await api("POST", "/api/undo", { lang: "es" });
+
+		const after = JSON.parse(readFileSync(esPath, "utf8"));
+		assert.equal(after.settings.brandNew, undefined, "an empty string is a DIFFERENT defect (blank, not missing)");
+		assert.equal(readFileSync(esPath, "utf8"), before, "and the file is exactly as it was");
+	});
+});
+
+test("the key still reports as missing after that undo, not as blank", async () => {
+	await withServer(async ({ api, locales }) => {
+		const en = JSON.parse(readFileSync(join(locales, "en.json"), "utf8"));
+		en.settings.brandNew = "Brand new";
+		writeFileSync(join(locales, "en.json"), `${JSON.stringify(en, null, 2)}\n`);
+
+		await api("POST", "/api/save", { lang: "es", key: "settings.brandNew", value: "x" });
+		await api("POST", "/api/undo", { lang: "es" });
+
+		const row = (await api("GET", "/api/rows?lang=es")).body.rows.find((r) => r.key === "settings.brandNew");
+		assert.ok(row, "it is still work to do");
+		assert.ok(row.flags.some((f) => f.code === "missing"), `expected missing, got ${row.flags.map((f) => f.code)}`);
+	});
+});
+
+test("A CONNECTION CAN BE CREATED AND THEN USED TO START A JOB — the path that was unreachable", async () => {
+	// The gap this covers: the settings screen was designed and not built, so no connection
+	// could exist, so the toolbar's engine dropdown was empty and Start was permanently
+	// disabled. Every piece had a passing unit test; the journey did not exist.
+	await withServer(async ({ api, server }) => {
+		assert.deepEqual((await api("GET", "/api/engines")).body.connections, [], "starts with none");
+
+		const made = await api("PUT", "/api/engines/connection", { label: "local", provider: "ollama" });
+		assert.equal(made.status, 200);
+
+		const { connections } = (await api("GET", "/api/engines")).body;
+		assert.equal(connections.length, 1, "the dropdown now has something to offer");
+
+		// And that connection actually resolves into a runnable profile.
+		let ran = null;
+		const { jobs } = server.jah;
+		const realStart = jobs.start.bind(jobs);
+		jobs.start = (opts) => realStart({ ...opts, translate: async ({ profile }) => {
+			ran = profile;
+			return { values: {}, failed: [], requests: 0 };
+		} });
+
+		const started = await api("POST", "/api/jobs", { lang: "es", scope: "keys", keys: ["settings.save"], connectionId: connections[0].id });
+		assert.equal(started.status, 202);
+		await jobs.settled();
+
+		assert.equal(ran?.kind, "ollama", "the preset's transport came through");
+		assert.ok(ran?.model, "and its model");
+	});
+});
+
+test("a job started with no connection is refused, not run against nothing", async () => {
+	await withServer(async ({ api }) => {
+		const res = await api("POST", "/api/jobs", { lang: "es", scope: "keys", keys: ["settings.save"], connectionId: 999 });
+		assert.equal(res.status, 404);
 	});
 });

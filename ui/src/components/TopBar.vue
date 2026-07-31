@@ -8,13 +8,16 @@ import { computed, onMounted, ref } from "vue";
 import UiButton from "@delebash/llm-ui/common/components/UiButton.vue";
 import UiSelect from "@delebash/llm-ui/common/components/UiSelect.vue";
 import { pushToast } from "@delebash/llm-ui/common/services/toastBridge.js";
+import EngineSettings from "@/components/EngineSettings.vue";
 import { api } from "@/services/api.js";
 import { useReview } from "@/stores/review.js";
 
 const s = useReview();
+const providers = ref([]);
 const connections = ref([]);
 const connectionId = ref(null);
 const scope = ref("flagged");
+const showSettings = ref(false);
 
 const SCOPES = [
 	{ value: "flagged", label: "all flagged" },
@@ -22,15 +25,18 @@ const SCOPES = [
 	{ value: "all", label: "whole catalogue" },
 ];
 
-onMounted(async () => {
+/** Re-read after saving a connection, so a new one appears without a reload. */
+async function loadEngines() {
 	try {
-		const { connections: c } = await api.engines();
+		const { providers: p, connections: c } = await api.engines();
+		providers.value = p;
 		connections.value = c;
-		connectionId.value = c[0]?.id ?? null;
+		connectionId.value = c.find((x) => x.id === connectionId.value)?.id ?? c[0]?.id ?? null;
 	} catch {
-		/* the toolbar must still render without engines configured */
+		/* the toolbar must still render when engines cannot be read */
 	}
-});
+}
+onMounted(loadEngines);
 
 const running = computed(() => s.job.state === "running");
 const pct = computed(() => (s.job.total ? Math.round((s.job.done / s.job.total) * 100) : 0));
@@ -76,9 +82,24 @@ async function run() {
         width="name"
         placeholder="no engine"
       />
-      <UiButton size="small" intent="primary" :disabled="!connectionId" @click="run">Start</UiButton>
+      <UiButton
+        size="small"
+        intent="primary"
+        :disabled="!connectionId"
+        :title="connectionId ? 'Start' : 'Add an engine connection first — the gear button'"
+        @click="run"
+      >Start</UiButton>
     </template>
 
     <UiButton size="small" intent="ghost" title="Undo last action (u)" @click="s.undo()">Undo</UiButton>
+    <UiButton size="small" intent="ghost" title="Engine connections" @click="showSettings = !showSettings">Engines</UiButton>
+
+    <EngineSettings
+      v-if="showSettings"
+      :providers="providers"
+      :connections="connections"
+      @saved="loadEngines"
+      @close="showSettings = false"
+    />
   </header>
 </template>

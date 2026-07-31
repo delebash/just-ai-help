@@ -31,6 +31,7 @@
 // `{...base, ...cfg.profile}`. Not a new rule — the existing one, moved.
 
 import { DatabaseSync } from "node:sqlite";
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
@@ -314,19 +315,28 @@ export function resolveConnection(db, id) {
  * it was ignored" is exactly how it happens.
  */
 export function assertGitignored(projectRoot, dbFile) {
-	const gitignore = join(projectRoot, ".gitignore");
-	if (!existsSync(gitignore)) {
-		throw new Error(`refusing to store a key: no .gitignore in ${projectRoot}. Add one containing "${dbFile}".`);
+	const target = join(projectRoot, dbFile);
+
+	// ASK GIT. The first version of this hand-parsed .gitignore and matched a few literal
+	// patterns, which was wrong in the direction that matters: it REFUSED where git itself
+	// says the file is ignored. Measured 2026-07-31 — `.evidence/2026-07-30-justwrite-es/`
+	// has no .gitignore of its own, but the repo root ignores `.evidence/` wholesale, so
+	// `git check-ignore` reports the database as ignored and my parser reported the opposite.
+	// Real gitignore semantics include parent directories, negation, globs and nested files;
+	// reimplementing that is a bug factory when the tool that owns the rules is one call away.
+	const r = spawnSync("git", ["check-ignore", "-q", "--", target], { cwd: projectRoot });
+
+	// 0 = ignored. 1 = not ignored. 128 (or a spawn error) = not a repo, or no git at all.
+	if (r.status === 0) return true;
+	if (r.status === 1) {
+		throw new Error(`refusing to store a key: git does not ignore "${target}". Add "${dbFile}" to .gitignore first.`);
 	}
-	const lines = readFileSync(gitignore, "utf8")
-		.split("\n")
-		.map((l) => l.trim())
-		.filter((l) => l && !l.startsWith("#"));
-	const covered = lines.some((l) => l === dbFile || l === `/${dbFile}` || l === "*.db" || l === `${dbFile}*`);
-	if (!covered) {
-		throw new Error(`refusing to store a key: .gitignore does not cover "${dbFile}". Add that line first.`);
-	}
-	return true;
+
+	// Outside a git repo there is nothing to leak a key INTO, so refusing would be theatre —
+	// but say so, because a silent pass here is exactly the assumption this guard exists to
+	// prevent someone making.
+	if (r.error || r.status === 128) return { ok: true, reason: "not a git repository — nothing to commit a key into" };
+	throw new Error(`refusing to store a key: could not ask git whether "${target}" is ignored (exit ${r.status}).`);
 }
 
 /**
