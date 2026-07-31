@@ -4,11 +4,10 @@ import vue from "@vitejs/plugin-vue";
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 
-// Standard Vite layout: index.html and this config at the project root, code in src/.
-// `root` is set explicitly because the config is invoked from the repo root
-// (`vite build --config ui/vite.config.js`) so that one package.json serves both halves.
+// Standard Vite layout: index.html and this config at the package root, code in src/.
+// client/ is its own npm package with its own node_modules, so vite runs from here and needs
+// no root override — `npm run build:client` at the repo root just delegates via --prefix.
 export default defineConfig({
-	root: here("."),
 	plugins: [vue()],
 	resolve: {
 		alias: {
@@ -21,7 +20,7 @@ export default defineConfig({
 		},
 	},
 	build: {
-		outDir: here("dist"),
+		outDir: "dist",
 		emptyOutDir: true,
 		// Fixed names, so the committed diff is legible and the freshness hash is stable.
 		rollupOptions: { output: { entryFileNames: "app.js", chunkFileNames: "app-[name].js", assetFileNames: "app.[ext]" } },

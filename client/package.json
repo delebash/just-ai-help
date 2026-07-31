@@ -1,0 +1,27 @@
+{
+  "name": "just-ai-help-client",
+  "private": true,
+  "type": "module",
+  "description": "The review workspace UI. Vite + Vue 3 on @delebash/llm-ui. Built to a COMMITTED dist/, so USING the tool needs no install — npm install here is only for developing this folder.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node ../scripts/ui-hash.js"
+  },
+  "dependencies": {
+    "@tanstack/vue-table": "^8.21.3",
+    "@vueuse/core": "^14.3.0",
+    "marked": "^18.0.5",
+    "pinia": "^3.0.1",
+    "reka-ui": "^2.10.0",
+    "vue": "^3.5.13",
+    "vue-sonner": "^2.0.9"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.0",
+    "vite": "^7.1.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "vue-demi@0.14.10": true
+  }
+}

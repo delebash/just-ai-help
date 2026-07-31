@@ -5,7 +5,7 @@ Two functions sharing one pipe: **translate** a locale folder with a local or on
 then re-read the files to assert what was written; **author** help docs whose front-matter becomes
 locale keys, so one sentence serves the article, the surface lede and the field hint.
 
-**Running it needs Node 24+ and nothing else.** The UI ships as a committed `ui/dist`
+**Running it needs Node 24+ and nothing else.** The UI ships as a committed `client/dist`
 and SQLite is built into the runtime (`node:sqlite`), so there is no install step for a *user*.
 `npm install` is for developing the UI only.
 
@@ -48,15 +48,21 @@ npm run build:ui                                   # rebuild the UI (developers 
 ## Layout
 
 ```
-server/   the Node tool — translate loop, checks, probe, the workspace API
-ui/       the review workspace: a standard Vite + Vue app (index.html, src/,
-          components/, stores/, services/, assets/), built to a COMMITTED ui/dist
+server/   the Node tool — translate loop, checks, probe, the workspace API.
+          package.json with NO dependencies and no node_modules. Node 24+ built-ins
+          only: global fetch for the engines, node:sqlite for the store.
+client/   the review workspace — a standard Vite + Vue app on @delebash/llm-ui.
+          Its OWN package.json and node_modules; built to a COMMITTED client/dist.
 test/     node --test, against server/
 scripts/  ui-hash.js — stamps the UI build so a stale committed dist is caught
 ```
 
-ONE `package.json` at the root. Everything the UI needs is build-time only, since the built
-output ships, so it is all `devDependencies` and a CLI user installs none of it.
+**Cleanly split, no workspaces.** The two halves own their own dependencies; the root
+`package.json` holds scripts only and has no `node_modules` at all. Every package in the tree
+belongs to the client, which is honest — the server imports nothing but `node:` built-ins.
+
+`npm install` happens in `client/`, and only for someone editing the UI. **Using** the tool
+needs no install, because `client/dist` is committed.
 
 ## Where to look
 

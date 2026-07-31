@@ -1,6 +1,6 @@
 // The committed UI build.
 //
-// ui/dist is checked in so the tool runs with node alone. That trade has one failure
+// client/dist is checked in so the tool runs with node alone. That trade has one failure
 // mode and it is nasty: someone edits a .vue file, forgets to rebuild, and the app keeps
 // working — just not as the code they are reading. Nothing errors, so nothing is noticed.
 //
@@ -16,7 +16,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import { HASH_FILE, uiSourceHash } from "../scripts/ui-hash.js";
 
-const DIST = resolve(import.meta.dirname, "../ui/dist");
+const DIST = resolve(import.meta.dirname, "../client/dist");
 const built = existsSync(HASH_FILE);
 
 test("the committed build exists", { skip: built ? false : "no build yet — run npm run build:ui" }, () => {
@@ -30,7 +30,7 @@ test("THE COMMITTED BUILD MATCHES ITS SOURCES", { skip: built ? false : "no buil
 	assert.equal(
 		stamped,
 		uiSourceHash(),
-		"ui/dist is stale. Run `npm run build:ui` and commit the result — otherwise the app you ship is not the code you are reading.",
+		"client/dist is stale. Run `npm run build:ui` and commit the result — otherwise the app you ship is not the code you are reading.",
 	);
 });
 

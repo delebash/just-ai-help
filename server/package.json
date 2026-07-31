@@ -1,0 +1,7 @@
+{
+  "name": "just-ai-help-server",
+  "private": true,
+  "type": "module",
+  "description": "The translate loop, the checks, the probe, and the workspace API. NO DEPENDENCIES — node 24+ built-ins only: global fetch for the engines, node:sqlite for the store. That is not a rule, it is what the code is; every candidate library failed a specific measured test, recorded in README.",
+  "dependencies": {}
+}

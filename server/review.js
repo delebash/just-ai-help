@@ -6,7 +6,7 @@
 // The API lives in server.js and the interface in review-ui/. This file is the CLI entry: it
 // resolves the config, points the server at the committed UI build, and prints where to go.
 //
-// WHY THE UI IS COMMITTED. ui/dist is checked in, so running this needs node and nothing
+// WHY THE UI IS COMMITTED. client/dist is checked in, so running this needs node and nothing
 // else — no npm install, no build step, and no checkout of the sibling repo that holds the
 // shared component kit. Developing the UI needs all three; using it needs none. A test asserts
 // the committed build matches its sources, because a stale artifact that still runs is the
@@ -18,7 +18,7 @@ import { pathToFileURL } from "node:url";
 import { createWorkspaceServer } from "./server.js";
 
 /** The committed build, when there is one. Absent = API only, which is what the tests use. */
-export const DEFAULT_UI = resolve(import.meta.dirname, "../ui/dist");
+export const DEFAULT_UI = resolve(import.meta.dirname, "../client/dist");
 
 export function createReviewServer({ configPath, uiDir = DEFAULT_UI, db } = {}) {
 	return createWorkspaceServer({ configPath, uiDir: existsSync(uiDir) ? uiDir : null, db });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // The freshness stamp for the committed UI build.
 //
-// `ui/dist` is COMMITTED so that running the tool needs only node — no npm install, no
+// `client/dist` is COMMITTED so that running the tool needs only node — no npm install, no
 // sibling repo. The cost of that decision is the classic one: a build artifact in the tree goes
 // stale the moment someone edits a source file and forgets to rebuild, and nothing complains.
 // The symptom is the worst kind — the app runs, it just quietly is not the code you are reading.
@@ -13,7 +13,7 @@ import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const UI = join(ROOT, "ui");
+const UI = join(ROOT, "client");
 /** Everything that can change what the build produces. node_modules is pinned by the lockfile. */
 const WATCHED = ["src", "index.html", "vite.config.js"];
 
