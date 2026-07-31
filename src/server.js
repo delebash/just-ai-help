@@ -23,6 +23,7 @@ import { buildContext, checkOne, runChecks } from "./checks.js";
 import { DB_FILE, assertGitignored, listConnections, listProviders, openProject, readConnection, resolveConnection, saveConnection } from "./db.js";
 import { flatten, rebuild } from "./jsonutil.js";
 import { JobManager } from "./jobs.js";
+import { callModel, parseItems } from "./loop.js";
 import {
 	actionHistory,
 	dropAllProposals,
@@ -396,6 +397,14 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 
 		"GET /api/runs": (_b, url) => ({ runs: runHistory(db, { lang: url.searchParams.get("lang") || null }) }),
 
+		"GET /api/reference": (_b, url) => {
+			const lang = url.searchParams.get("lang") || langs[0];
+			const key = url.searchParams.get("key");
+			const engine = url.searchParams.get("engine") ?? "backtranslate";
+			if (!key) return { _code: 400, error: "key required" };
+			return { key, lang, engine, cached: getReference(db, { lang, key, engine }) };
+		},
+
 		"GET /api/jobs/current": () => ({ job: jobs.status() }),
 
 		"POST /api/jobs/cancel": () => ({ job: jobs.cancel() }),
@@ -437,6 +446,45 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 			const off = jobs.subscribe((e) => res.write(`event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`));
 			req.on("close", off);
 			return;
+		}
+
+		// Back-translation: the target string rendered BACK into English by a local model.
+		//
+		// It answers a question no other layer can: "what does this actually say?" — for a
+		// reviewer who does not read the target language fluently, that is the difference
+		// between judging a translation and taking its word for it. It catches wrong-word
+		// defects (`autoconservado` reads back as "self-preserved", not "autosaved").
+		//
+		// It does NOT catch everything, and the panel says so rather than implying more.
+		// Measured 2026-07-31: a correct and an incorrect Spanish rendering of the data-folder
+		// hint back-translated to the SAME English, because the ambiguity is in the source.
+		// Read-only, cached, and never written to a catalogue.
+		if (route === "POST /api/backtranslate") {
+			const b = await body(req);
+			if (!b) return json(res, 400, { error: "bad JSON" });
+			const { lang, key, connectionId = null } = b;
+			if (typeof lang !== "string" || typeof key !== "string") return json(res, 400, { error: "lang and key required" });
+
+			const dst = readTargetFlat(lang)[key];
+			if (!dst) return json(res, 404, { error: `no translation for ${key}` });
+
+			const cached = getReference(db, { lang, key, engine: "backtranslate" });
+			if (cached) return json(res, 200, { key, lang, english: cached.value, cached: true });
+
+			const profile = connectionId ? resolveConnection(db, connectionId) : null;
+			if (!profile) return json(res, 400, { error: "no engine connection selected" });
+
+			try {
+				const system = `You are a translator, ${lang}→${cfg.sourceLanguage}. Translate the text literally, preserving any {placeholders} exactly. Output ONLY JSON matching the schema.`;
+				const out = await callModel({ profile, system, user: `Translate items: ${JSON.stringify([{ id: 0, text: dst }])}` });
+				const english = parseItems(out).get(0);
+				if (!english) return json(res, 502, { error: "the engine returned nothing usable" });
+				putReference(db, { lang, key, engine: "backtranslate", value: english });
+				return json(res, 200, { key, lang, english, cached: false });
+			} catch (e) {
+				// A dead second opinion must never block reviewing.
+				return json(res, 502, { error: e.message });
+			}
 		}
 
 		if (route === "POST /api/jobs") {

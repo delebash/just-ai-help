@@ -43,6 +43,7 @@ function onKey(e) {
 		u: () => s.undo(),
 		e: () => detail.value?.focusEditor(),
 		g: () => detail.value?.toggleGoogle(),
+		b: () => detail.value?.backtranslate(),
 		"/": () => document.querySelector('input[placeholder^="key or text"]')?.focus(),
 	}[e.key];
 	if (go) {

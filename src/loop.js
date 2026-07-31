@@ -225,7 +225,12 @@ export function effectiveTemperature(profile) {
 	return profile.kind === "ollama" ? body.options.temperature : body.temperature;
 }
 
-async function callModel({ profile, system, user }) {
+/**
+ * One request to an engine. Exported because back-translation needs the transport without the
+ * batching, shielding and retry machinery around it — it sends one string and shows the answer
+ * to a human, and nothing it returns is ever written to a catalogue.
+ */
+export async function callModel({ profile, system, user }) {
 	const { url, headers, body } = buildRequest({ profile, system, user });
 
 	// An explicit controller, not AbortSignal.timeout(). The convenience form leaves a live
@@ -256,7 +261,8 @@ async function callModel({ profile, system, user }) {
 }
 
 /** Parses the model's JSON into a Map(id -> translation). Throws on anything unusable. */
-function parseItems(content) {
+/** Exported alongside callModel so a single-shot caller (back-translation) can read a reply. */
+export function parseItems(content) {
 	let parsed;
 	try {
 		parsed = JSON.parse(content);

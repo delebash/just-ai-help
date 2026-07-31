@@ -311,3 +311,39 @@ test("malformed JSON is refused with 400", async () => {
 		assert.equal(res.status, 400);
 	});
 });
+
+test("BACK-TRANSLATION refuses without an engine rather than pretending", async () => {
+	await withServer(async ({ api }) => {
+		const res = await api("POST", "/api/backtranslate", { lang: "es", key: "settings.save" });
+		assert.equal(res.status, 400);
+		assert.match(res.body.error, /no engine connection/);
+	});
+});
+
+test("back-translating an untranslated key 404s", async () => {
+	await withServer(async ({ api }) => {
+		const res = await api("POST", "/api/backtranslate", { lang: "es", key: "characterAudit.action", connectionId: 1 });
+		assert.notEqual(res.status, 500, "a missing target must be a clean 404/400, never a crash");
+	});
+});
+
+test("a cached back-translation is served without touching an engine", async () => {
+	await withServer(async ({ api, server }) => {
+		const { putReference } = await import("../src/store.js");
+		putReference(server.jah.db, { lang: "es", key: "settings.save", engine: "backtranslate", value: "Save" });
+		const res = await api("POST", "/api/backtranslate", { lang: "es", key: "settings.save" });
+		assert.equal(res.status, 200);
+		assert.equal(res.body.english, "Save");
+		assert.equal(res.body.cached, true, "no engine was consulted — and none is configured here");
+	});
+});
+
+test("EDITING A KEY DROPS ITS CACHED SECOND OPINION — stale advice must not linger", async () => {
+	await withServer(async ({ api, server }) => {
+		const { putReference } = await import("../src/store.js");
+		putReference(server.jah.db, { lang: "es", key: "settings.save", engine: "backtranslate", value: "old reading" });
+		await api("POST", "/api/save", { lang: "es", key: "settings.save", value: "Guardar todo" });
+		const res = await api("GET", "/api/reference?lang=es&key=settings.save");
+		assert.equal(res.body.cached, null, "the reading was about the old text");
+	});
+});

@@ -22,6 +22,8 @@ const note = ref("");
 const siblings = ref([]);
 const proposal = ref(null);
 const showGoogle = ref(false);
+const back = ref(null);
+const backBusy = ref(false);
 
 /** Plain-English for the check codes. A code alone tells a reviewer nothing. */
 const WHY = {
@@ -59,6 +61,7 @@ watch(
 		siblings.value = [];
 		proposal.value = null;
 		showGoogle.value = false;
+		back.value = null;
 		if (!r) return;
 		try {
 			const [sib, props] = await Promise.all([api.siblings(r.lang, r.key), api.proposals(r.lang, r.key)]);
@@ -91,12 +94,35 @@ async function saveNote() {
 	pushToast({ title: "Note saved", description: "It will be sent with this key on the next translation." });
 }
 
+/**
+ * What the translation actually SAYS, back in English.
+ *
+ * For a reviewer who does not read the target language fluently this is the difference between
+ * judging a translation and taking its word for it. It catches wrong-word defects. It does NOT
+ * catch everything — measured 2026-07-31, a correct and an incorrect rendering of one hint
+ * back-translated to identical English, because the ambiguity was in the source — so the panel
+ * says what it is rather than implying more.
+ */
+async function backtranslate() {
+	if (!sel.value || backBusy.value) return;
+	backBusy.value = true;
+	try {
+		const conn = (await api.engines()).connections[0];
+		const r = await api.backtranslate(sel.value.lang, sel.value.key, conn?.id ?? null);
+		back.value = r.english;
+	} catch (e) {
+		back.value = `— ${e.message}`;
+	} finally {
+		backBusy.value = false;
+	}
+}
+
 /** Takes the staged value into the box — never applied automatically. */
 function useValue(v) {
 	draft.value = v;
 }
 
-defineExpose({ focusEditor: () => document.querySelector("textarea.tgt")?.focus(), commit, doAccept, toggleGoogle: () => (showGoogle.value = !showGoogle.value) });
+defineExpose({ focusEditor: () => document.querySelector("textarea.tgt")?.focus(), commit, doAccept, backtranslate, toggleGoogle: () => (showGoogle.value = !showGoogle.value) });
 </script>
 
 <template>
@@ -157,6 +183,21 @@ defineExpose({ focusEditor: () => document.querySelector("textarea.tgt")?.focus(
             An independent reading. Neither source is reliably better — on one measured key the
             local model was right and Google wrong; on another, the reverse. Copy it across only
             if you agree.
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <span class="lbl">What it says in English</span>
+        <div class="opinion">
+          <header>
+            <span>Back-translation</span>
+            <UiButton size="small" variant="ghost" style="margin-left:auto" :loading="backBusy" @click="backtranslate">
+              {{ back ? 'Again' : 'Read it back' }}
+            </UiButton>
+          </header>
+          <div class="val" :style="back ? '' : 'color: var(--muted); font-size: 12.5px'">
+            {{ back || 'Renders your translation back into English with the local model. Catches wrong words — not every defect, since an ambiguous source round-trips unchanged.' }}
           </div>
         </div>
       </div>

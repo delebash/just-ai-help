@@ -44,6 +44,9 @@ export const api = {
 	applyProposals: (lang, keys) => call("POST", "/api/proposals/apply", { lang, keys }),
 	discardProposals: (lang, keys = null) => call("DELETE", "/api/proposals", { lang, keys }),
 
+	backtranslate: (lang, key, connectionId) => call("POST", "/api/backtranslate", { lang, key, connectionId }),
+	reference: (lang, key) => call("GET", `/api/reference?lang=${encodeURIComponent(lang)}&key=${encodeURIComponent(key)}`),
+
 	engines: () => call("GET", "/api/engines"),
 	saveConnection: (conn) => call("PUT", "/api/engines/connection", conn),
 	runs: (lang) => call("GET", `/api/runs${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),

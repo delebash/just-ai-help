@@ -17,9 +17,10 @@ Read branch and commit state from git, never from this file.
 | 1b | `server.js` — the whole API over HTTP | `b29cca5` |
 | 3 | `review-ui/` Vue 3 app + committed `dist` + staleness guard | `2abb601` |
 | 5 | per-key notes feeding the next run | `bc87719` |
+| 4 | back-translation — endpoint, cache, panel, `b` key | this commit |
 | 6 | docs — README, GUIDE, CLAUDE.md | this commit |
 
-**144 tests pass.** Was 75 before this work.
+**148 tests pass.** Was 75 before this work.
 
 ## What was built
 
@@ -27,7 +28,9 @@ Read branch and commit state from git, never from this file.
   undoable on Monday. Un-accept exists; accepted findings are a visible, reversible bucket.
 - **Bulk re-translate** with progress, cancel and rejoin-after-reload. Results are **proposals** —
   an engine never writes the catalogue.
-- **Second opinion** — the Google widget in a same-origin frame, banner cropped at 42px.
+- **Second opinion** — the Google widget in a same-origin frame, banner cropped at 42px, plus
+  **back-translation**: the target read back into English by the local model, cached, and dropped
+  the moment the translation changes.
 - **Siblings**, **terminology** against the catalogue's own usage, **per-key notes** that feed the
   next run.
 - **All target languages in one queue**, filterable.
@@ -52,8 +55,6 @@ Read branch and commit state from git, never from this file.
 
 ## Open / not done
 
-- **Back-translation** (`POST /api/backtranslate`) is specified in the design and **not built**.
-  The second-opinion panel currently offers Google and staged proposals.
 - **`--escalate` from the UI** works through the job endpoint; the CLI flag is unchanged.
 - **No online engine is configured.** Groq/Mistral/OpenRouter rows are not added — the user has
   no key and did not want one yet. Local engines work today.
