@@ -580,3 +580,59 @@ all 58.
 
 **Still open:** the ~134 advisory `disagreement` suspects, and whether Spanish ships (it is
 committed and testable via Settings → Project → Language).
+
+## 2026-07-31, later — `init` replaces the example config
+
+`node server/init.js path/to/en.json` writes the project config. **`docs/config.example.json` is
+deleted** — there is nothing to copy.
+
+Setting a project up used to mean finding a template inside THIS repo, copying it into a
+different repo, renaming it, and hand-editing a relative path the example itself had wrong. That
+is the `.env.example` pattern used where it does not fit: `.env.example` sits in the same repo as
+the `.env` it becomes and exists because `.env` is gitignored. Tools that configure a *different*
+directory generate the file (`eslint --init`, `tsc --init`), and a generator can read your
+strings, which a template never could.
+
+**The config names the FILE, not the folder.** `"source": "../src/i18n/locales/en.json"` — its
+directory is the locale folder and its basename is the source language, so `locales` +
+`sourceLanguage` collapse into one field that nothing can disagree with. `sourceLanguage` had
+been defaulting to `"en"` invisibly; that assumption is gone. Point init at `es.json` and Spanish
+is the source with `en`/`fr` as targets — tested, not assumed.
+
+It derives `targets` from the locale files already present, REPORTS the placeholder syntax and
+plural separator it read (never stores them — they are read every run), and refuses to decide
+`context` or `glossary`. It proposes glossary candidates and writes **none**: that field turned
+48 correct translations into findings when `AI` went into it.
+
+Two bugs its own tests caught, both of which would hit any real catalogue: the candidate sort
+called `localeCompare` on a `[word, count]` array and threw the moment two terms tied, and a
+trailing full stop was part of the token so `"Studio."` and `"Studio"` counted separately.
+
+195 tests. JustWrite's config still uses the older folder-shaped keys and still passes.
+
+## OPEN — the setup/review page, undecided
+
+The user wants one entry point (`npm start`) serving a tabbed page: a setup tab that browses for
+`en.json`, picks languages, takes the context, and lets you tick glossary candidates; a review
+tab that appears once there is something to review; and the ability to kick off a run, watch it,
+cancel it, close the browser and come back.
+
+**Most of it exists.** `POST /api/jobs`, `/api/jobs/cancel`, `/api/jobs/stream`,
+`/api/jobs/current`, and `JobManager` already does start/cancel/status/busy.
+
+**The blocker:** `createWorkspaceServer` reads the config on its first line, so it cannot start
+before one exists. Routes dispatch through a lookup table, so an unloaded project is ONE guard,
+not a per-handler change — verified by reading, after a previous session-mate claimed "~30
+handlers" without counting. What has NOT been traced is how much of lines 102–479 must move to
+make "start with no config, load one when it appears" work. **Do not estimate it without
+reading it.**
+
+Two things settled in that discussion:
+- **Load once, not swap.** Nobody asked to switch projects at runtime, so there is no teardown
+  path and no "job running against the old project" hazard. That requirement was invented.
+- **`--check-only` stays a pure CLI command with no server.** It is the CI gate.
+
+One design point raised and unresolved: a browser file picker yields a `File`, not a path, so
+"browse for the file" means exposing a directory-listing API over localhost. `npm start
+<path>` pre-filling the page, plus a paste-a-path box with live validation, gets the same
+benefit without that surface — but the user asked for browsing, and this was never decided.
