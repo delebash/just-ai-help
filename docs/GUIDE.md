@@ -89,37 +89,46 @@ local is free, private, and good enough — that is the whole point of the measu
 cp docs/config.example.json just-ai-help.config.json
 ```
 
-Edit the copy:
+Put the copy **next to the strings it describes** and edit it. Four fields:
 
 ```json
 {
-  "localesDir": "src/i18n/locales",
-  "sourceLanguage": "en",
+  "locales": "src/i18n/locales",
   "targets": ["es"],
-
-  "placeholder": { "prefix": "{", "suffix": "}" },
-  "pluralSeparator": "|",
-
   "context": "a desktop app for managing recipes",
-  "glossary": { "doNotTranslate": ["Acme", "Smart Pantry"] },
-
-  "engine": "ollama"
+  "glossary": ["Acme", "Smart Pantry"]
 }
 ```
 
-- **`placeholder`** — `{` / `}` for vue-i18n, `{{` / `}}` for i18next.
-- **`pluralSeparator`** — `"|"` for vue-i18n; set it to `null` if your framework has no pipes.
-- **`context`** — one sentence about your app. It goes in the prompt and genuinely changes
-  word choice.
-- **`glossary.doNotTranslate`** — brand names and terms that must survive untouched.
-- **`engine`** — which row of `server/config/engines.json` to use. **That file is the list**; it
-  is not repeated here, because a copy of it in prose is a copy that goes stale, and this one
-  already had. Local rows need no key; the review workspace shows every row with a key/no-key
-  status beside it. Each row already carries the right settings for the model it names, so
-  switching model by switching *engine* is the option that cannot go wrong.
-- **`model`** — overrides the engine row's model, e.g. `"model":
-  "hf.co/tencent/Hy-MT2-7B-GGUF:Q4_K_M"`. If the model you name is a *thinking* model, add
-  `"think": false` too, or it will return nothing (see troubleshooting).
+- **`locales`** — where `en.json` lives, relative to **this file**. Its folder is the locale
+  folder and its filename is the source language, so neither needs stating.
+- **`targets`** — the languages to produce. The only one that cannot be worked out for you: a
+  language you do not have yet has no file to read.
+- **`context`** — one sentence about your app, sent with **every** request. UI strings are
+  short and ambiguous — "Beat" is a story beat, a musical beat, or to strike — and this is what
+  makes the model choose. It cannot disambiguate one particular string; a per-key note does
+  that. Changing it invalidates the cache, because it changes every prompt.
+- **`glossary`** — brand names and identifiers that must survive untouched. **Only for terms
+  that must never be translated *anywhere*** — see the troubleshooting note at the end, because
+  getting this wrong is measured at 48 correct translations turned into findings.
+
+**Run it from anywhere.** Every path resolves against the config file, not your shell:
+
+```bash
+node path/to/just-ai-help/server/translate.js path/to/your-app/just-ai-help.config.json
+```
+
+### What you no longer configure
+
+- **`placeholder`** and **`pluralSeparator`** are **read from your `en.json`** — whether you
+  write `{n}` or `{{n}}`, and whether `" | "` separates plural forms, is visible in your own
+  strings. State them only to override what was read; every run prints what it inferred.
+- **The engine and your API key** live in the review workspace as a *connection*, so a key is
+  never in a committed file. For a headless CLI run you can still set `engine`, `model`, `url`,
+  `think` and `profile` here — and since 2026-07-31 those are applied identically on both
+  paths. Before that, an override set here was silently ignored by the workspace.
+
+The older key names (`localesDir`, `sourceLanguage`, `glossary.doNotTranslate`) still work.
 
 ---
 

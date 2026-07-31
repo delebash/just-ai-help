@@ -21,7 +21,10 @@ import { extname, join, resolve } from "node:path";
 import { acceptanceEntry, acceptanceHash, loadAccepted, partitionAccepted, saveAccepted } from "./accepted.js";
 import { buildContext, checkOne, runChecks } from "./checks.js";
 import { DB_FILE, assertGitignored, listConnections, listProviders, openProject, readConnection, resolveConnection, saveConnection } from "./db.js";
+import { applyConfigOverrides, profileProblem } from "./engine.js";
+import { inferConfig } from "./infer.js";
 import { flatten, rebuild } from "./jsonutil.js";
+import { projectPaths } from "./paths.js";
 import { JobManager } from "./jobs.js";
 import { callModel, parseItems } from "./loop.js";
 import {
@@ -96,17 +99,33 @@ const gtFrame = (text, tl) => `<!doctype html>
  * port. An untestable server is how the save path silently stops preserving structure.
  */
 export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}) {
-	const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-	const projectRoot = resolve(configPath, "..");
-	const localesDir = resolve(cfg.localesDir);
+	const rawCfg = JSON.parse(readFileSync(configPath, "utf8"));
+
+	// Every path from one place, anchored to the config file. This line used to be
+	// `resolve(cfg.localesDir)` — against the WORKING DIRECTORY — sitting directly beneath a
+	// correct `resolve(configPath, "..")`. The file worked out the right anchor and then did
+	// not use it, so the database landed beside the app and the locale files did not.
+	const paths = projectPaths(configPath, rawCfg);
+	const projectRoot = paths.configDir;
+	const localesDir = paths.localesDir;
 	const conventions = JSON.parse(readFileSync(new URL("./config/conventions.json", import.meta.url), "utf8"));
-	const langs = cfg.targets ?? [];
+	const langs = rawCfg.targets ?? [];
 
 	const db = injectedDb ?? openProject(projectRoot);
 	const jobs = new JobManager({ db });
 
-	const sourceFile = join(localesDir, `${cfg.sourceLanguage}.json`);
-	const fileFor = (lang, kind) => join(localesDir, kind ? `${lang}.${kind}.json` : `${lang}.json`);
+	const sourceFile = paths.sourceFile;
+	// Inference needs the source strings, so it happens after the file is locatable. An
+	// explicit config value still wins; this only fills what was never stated.
+	const { cfg } = inferConfig(rawCfg, flatten(JSON.parse(readFileSync(sourceFile, "utf8"))));
+	const fileFor = (lang, kind) =>
+		kind === "accepted"
+			? paths.acceptedFile(lang)
+			: kind === "notes"
+				? paths.notesFile(lang)
+				: kind === "probe"
+					? paths.probeFile(lang)
+					: paths.targetFile(lang);
 
 	const readSourceRaw = () => JSON.parse(readFileSync(sourceFile, "utf8"));
 	const readJson = (p, fallback) => (existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : fallback);
@@ -500,8 +519,13 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 			const cached = getReference(db, { lang, key, engine: "backtranslate" });
 			if (cached) return json(res, 200, { key, lang, english: cached.value, cached: true });
 
-			const profile = connectionId ? resolveConnection(db, connectionId) : null;
-			if (!profile) return json(res, 400, { error: "no engine connection selected" });
+			const base = connectionId ? resolveConnection(db, connectionId) : null;
+			if (!base) return json(res, 400, { error: "no engine connection selected" });
+			// Same merge as the job path — a back-translation must run on the engine the project
+			// config actually describes, or a second opinion is a second opinion about nothing.
+			const profile = applyConfigOverrides(base, cfg);
+			const problem = profileProblem(profile, { name: "connection" });
+			if (problem) return json(res, 400, { error: problem });
 
 			try {
 				const system = `You are a translator, ${lang}→${cfg.sourceLanguage}. Translate the text literally, preserving any {placeholders} exactly. Output ONLY JSON matching the schema.`;
@@ -568,9 +592,15 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 		// the caller did not ask for, so an unknown one is refused rather than interpreted.
 		if (!SCOPES.has(scope)) return json(res, 400, { error: `unknown scope: ${scope}. Use one of ${[...SCOPES].join(", ")}` });
 
-		const profile = connectionId ? resolveConnection(db, connectionId) : null;
-		if (connectionId && !profile) return json(res, 404, { error: `no such connection: ${connectionId}` });
-		if (profile?.missingProvider) return json(res, 400, { error: `connection references a provider that no longer exists: ${profile.missingProvider}` });
+		// THE FIX for the two-resolver bug. This used to be the bare connection, so cfg.model,
+		// cfg.url, cfg.think and cfg.profile appeared ZERO times in the job path: an override
+		// set in the project config worked from the CLI and was silently ignored when you
+		// pressed re-translate in this workspace. Same tool, same config, two answers.
+		const base = connectionId ? resolveConnection(db, connectionId) : null;
+		if (connectionId && !base) return json(res, 404, { error: `no such connection: ${connectionId}` });
+		const profile = base ? applyConfigOverrides(base, cfg) : null;
+		const problem = profile ? profileProblem(profile, { name: engine ?? "connection" }) : null;
+		if (problem) return json(res, 400, { error: problem });
 
 		const sourceFlat = flatten(readSourceRaw());
 		let wanted;
@@ -594,7 +624,7 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 				// notes MUST be here. Without them the note a reviewer writes on a key is not sent
 				// when they press re-translate on that same key — which is the one place it matters.
 				cfg: { ...cfg, conventionsLine: conventions[lang]?.promptLine ?? "", notes: flatten(readNotes(lang)) },
-				cachePath: join(projectRoot, ".jah-cache.json"),
+				cachePath: paths.cachePath,
 			});
 			return json(res, 202, { job: status });
 		} catch (e) {

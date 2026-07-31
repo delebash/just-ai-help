@@ -33,11 +33,14 @@
 // catalogue can never exit 0 — and --check-only is the CI gate.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { acceptanceEntry, acceptanceHash, loadAccepted, partitionAccepted, saveAccepted } from "./accepted.js";
+import { join } from "node:path";
+import { acceptanceEntry, acceptanceHash, loadAccepted, partitionAccepted, saveAccepted, UNKNOWN_REVIEWER } from "./accepted.js";
 import { buildContext, runChecks, summarise } from "./checks.js";
+import { resolveEngineRow } from "./engine.js";
+import { inferConfig } from "./infer.js";
 import { flatten, rebuild } from "./jsonutil.js";
 import { effectiveTemperature, translateLanguage } from "./loop.js";
+import { projectPaths } from "./paths.js";
 import { rankSuspects, spread } from "./suspects.js";
 
 const argv = process.argv.slice(2);
@@ -63,49 +66,51 @@ const escalateIdx = escalateTo ? argv.indexOf("--escalate") + 1 : -1;
 const acceptArg = argv.includes("--accept") ? argv[argv.indexOf("--accept") + 1] : null;
 const acceptIdx = acceptArg ? argv.indexOf("--accept") + 1 : -1;
 const acceptKeys = acceptArg ? acceptArg.split(",").map((k) => k.trim()).filter(Boolean) : [];
-const configPath = argv.find((a, i) => !a.startsWith("--") && i !== escalateIdx && i !== acceptIdx) || "just-ai-help.config.json";
+// --by names the human recording a verdict. It is only meaningful with --accept, and defaults
+// to "unknown" rather than the OS username on purpose — see accepted.js.
+const byArg = argv.includes("--by") ? argv[argv.indexOf("--by") + 1] : null;
+const byIdx = byArg ? argv.indexOf("--by") + 1 : -1;
+const reviewer = byArg || process.env.JAH_REVIEWER || UNKNOWN_REVIEWER;
+const configPath =
+	argv.find((a, i) => !a.startsWith("--") && i !== escalateIdx && i !== acceptIdx && i !== byIdx) ||
+	"just-ai-help.config.json";
 
 if (!existsSync(configPath)) {
 	console.error(`No config at ${configPath}`);
 	process.exit(1);
 }
-const cfg = JSON.parse(readFileSync(configPath, "utf8"));
+const rawCfg = JSON.parse(readFileSync(configPath, "utf8"));
 const engines = JSON.parse(readFileSync(new URL("./config/engines.json", import.meta.url), "utf8"));
 
-const localesDir = resolve(cfg.localesDir);
-const sourceFile = join(localesDir, `${cfg.sourceLanguage}.json`);
+// EVERY path comes from here, anchored to the config file rather than the working directory.
+// That is what removes the `cd` this tool used to require, and what stops the cache silently
+// vanishing when a command is run from somewhere else.
+const paths = projectPaths(configPath, rawCfg);
+const localesDir = paths.localesDir;
+const sourceFile = paths.sourceFile;
 const sourceRaw = JSON.parse(readFileSync(sourceFile, "utf8"));
 const src = flatten(sourceRaw);
+
+// Fields the catalogue itself can answer are read from it. An explicit config value always
+// wins; inference only fills a gap, and says so rather than deciding quietly.
+const { cfg, inferred } = inferConfig(rawCfg, src);
+if (inferred.length) console.log(`Read from ${cfg.sourceLanguage ?? "en"}.json: ${inferred.join(", ")}`);
 
 // Conventions the target language requires regardless of what the source did. Read on both
 // paths: the loop puts `promptLine` in the prompt, the checks use `pairedPunct` to find out
 // whether the model listened. Shipped for Spanish only, on purpose.
 const conventions = JSON.parse(readFileSync(new URL("./config/conventions.json", import.meta.url), "utf8"));
 
-/** Resolves an engines.json row into a runnable profile, or exits with a usable message. */
+/**
+ * Resolves an engines.json row into a runnable profile, or exits with a usable message.
+ *
+ * The merge itself lives in engine.js and is shared with the workspace, so a project config
+ * means the same thing whichever door you came through — it did not, before 2026-07-31.
+ */
 function resolveProfile(name, { applyConfigOverrides }) {
-	const base = engines[name];
-	if (!base) {
-		const known = Object.keys(engines).filter((k) => !k.startsWith("_")).join(", ");
-		console.error(`Unknown engine "${name}". Known: ${known}`);
-		process.exit(1);
-	}
-	const profile = { ...base, ...(applyConfigOverrides ? (cfg.profile ?? {}) : {}) };
-	if (applyConfigOverrides) {
-		// The config may override anything on the profile — the model id above all, because a
-		// local server's model id is whatever YOU serve and the profile cannot know it. An
-		// ESCALATION profile deliberately takes none of these: the point of escalating is to
-		// run somewhere else, and inheriting the config's model would silently defeat it.
-		if (cfg.model) profile.model = cfg.model;
-		if (cfg.url) profile.url = cfg.url;
-		if (cfg.think !== undefined) profile.think = cfg.think;
-	}
-	if (!profile.model || profile.model.startsWith("REQUIRED")) {
-		console.error(`Engine "${name}" needs a model id — set "model" in your config.`);
-		process.exit(1);
-	}
-	if (profile.apiKeyEnv && !process.env[profile.apiKeyEnv]) {
-		console.error(`Set ${profile.apiKeyEnv} — the engine "${name}" needs it.`);
+	const { profile, problem } = resolveEngineRow(engines, name, cfg, { applyOverrides: applyConfigOverrides });
+	if (problem) {
+		console.error(problem);
 		process.exit(1);
 	}
 	return profile;
@@ -126,7 +131,7 @@ async function translateInto(
 	lang,
 	subset,
 	profile,
-	{ force: forceThese, outPath = join(localesDir, `${lang}.json`), cachePath = resolve(".jah-cache.json") },
+	{ force: forceThese, outPath = paths.targetFile(lang), cachePath = paths.cachePath },
 ) {
 	const existing = existsSync(outPath) ? flatten(JSON.parse(readFileSync(outPath, "utf8"))) : {};
 
@@ -164,7 +169,7 @@ async function translateInto(
 }
 
 /** Where the --probe pass keeps its second opinion for one language. */
-const probePath = (lang) => join(localesDir, `${lang}.probe.json`);
+const probePath = (lang) => paths.probeFile(lang);
 
 /**
  * Per-key notes written during review. Committed, unlike the probe sidecar, because a note
@@ -173,7 +178,7 @@ const probePath = (lang) => join(localesDir, `${lang}.probe.json`);
  * Absent file = no notes, which is the normal case until someone reviews something.
  */
 function readNotes(lang) {
-	const path = join(localesDir, `${lang}.notes.json`);
+	const path = paths.notesFile(lang);
 	if (!existsSync(path)) return {};
 	try {
 		const raw = JSON.parse(readFileSync(path, "utf8"));
@@ -183,7 +188,7 @@ function readNotes(lang) {
 	}
 }
 /** Where a language's reviewer verdicts live. Committed, unlike the probe sidecar — see accepted.js. */
-const acceptedPath = (lang) => join(localesDir, `${lang}.accepted.json`);
+const acceptedPath = (lang) => paths.acceptedFile(lang);
 
 /**
  * EVERY finding for one language: the structural checks, plus the disagreement suspects
@@ -217,7 +222,7 @@ if (acceptKeys.length) {
 	// it testable and keeps a reviewer unblocked if the page needs work.
 	let recorded = 0;
 	for (const lang of cfg.targets) {
-		const outPath = join(localesDir, `${lang}.json`);
+		const outPath = paths.targetFile(lang);
 		if (!existsSync(outPath)) {
 			console.error(`${lang}: nothing to accept — no ${lang}.json yet.`);
 			process.exitCode = 1;
@@ -237,7 +242,7 @@ if (acceptKeys.length) {
 				continue;
 			}
 			for (const f of forKey) {
-				const entry = acceptanceEntry({ key, code: f.code, src: src[key] ?? "", dst: dst[key] ?? "" });
+				const entry = acceptanceEntry({ key, code: f.code, src: src[key] ?? "", dst: dst[key] ?? "", by: reviewer });
 				store[acceptanceHash(entry)] = entry;
 				console.log(`${lang}: accepted ${f.code} on ${key}`);
 				recorded++;
@@ -245,7 +250,19 @@ if (acceptKeys.length) {
 		}
 		saveAccepted(path, store);
 	}
-	console.log(`\n${recorded} finding(s) recorded as reviewed. Commit ${cfg.targets.map((l) => `${l}.accepted.json`).join(", ")}.`);
+	console.log(
+		`\n${recorded} finding(s) recorded as reviewed by "${reviewer}". Commit ${cfg.targets.map((l) => `${l}.accepted.json`).join(", ")}.`,
+	);
+	if (reviewer === UNKNOWN_REVIEWER) {
+		// Loud rather than silent. An acceptance claims a human looked; when nobody said who,
+		// the file should say so and the person running it should know it will.
+		console.warn(
+			`\nWARNING: recorded as "${UNKNOWN_REVIEWER}" — nobody claimed these verdicts.\n` +
+				`  Pass --by <name>, or set JAH_REVIEWER, so the sidecar records who signed them off.\n` +
+				`  This matters: on 2026-07-31 an agent wrote 58 verdicts into a real project in bulk,\n` +
+				`  and the format could not tell them apart from a human's review.`,
+		);
+	}
 	process.exit(process.exitCode ?? 0);
 }
 
@@ -259,7 +276,7 @@ if (escalateTo) {
 	const started = Date.now();
 
 	for (const lang of cfg.targets) {
-		const outPath = join(localesDir, `${lang}.json`);
+		const outPath = paths.targetFile(lang);
 		if (!existsSync(outPath)) {
 			console.error(`${lang}: nothing to escalate — no ${lang}.json yet. Translate first.`);
 			hardFailures++;
@@ -321,7 +338,7 @@ if (escalateTo) {
 			const probed = await translateInto(lang, src, profile, {
 				force: true,
 				outPath: probePath(lang),
-				cachePath: resolve(".jah-probe-cache.json"),
+				cachePath: join(paths.configDir, ".jah-probe-cache.json"),
 			});
 
 			// Report the RATE, and say so when it is zero. A probe that finds nothing looks
@@ -330,7 +347,7 @@ if (escalateTo) {
 			// broken (temperature 0, a cache mistake, an engine ignoring the sampler). This
 			// tool exists because a run that silently did nothing looked like a run that
 			// worked — the same failure must not reappear one layer up.
-			const target = flatten(JSON.parse(readFileSync(join(localesDir, `${lang}.json`), "utf8")));
+			const target = flatten(JSON.parse(readFileSync(paths.targetFile(lang), "utf8")));
 			const moved = Object.keys(src).filter(
 				(k) => typeof target[k] === "string" && typeof probed[k] === "string" && spread(target[k], probed[k]) > 0,
 			).length;
@@ -351,7 +368,7 @@ if (hardFailures) process.exitCode = 1;
 // ── post-checks — verify the FILES that were written, not the run that wrote them ──────
 let failed = 0;
 for (const lang of cfg.targets) {
-	const outPath = join(localesDir, `${lang}.json`);
+	const outPath = paths.targetFile(lang);
 	if (!existsSync(outPath)) {
 		console.error(`FAIL ${lang}: no output file`);
 		failed++;

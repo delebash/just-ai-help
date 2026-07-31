@@ -89,7 +89,13 @@ test("a sidecar round-trips, keeps its _why, and ignores metadata keys on read",
 	assert.ok(onDisk._why.length > 0, "the file explains itself to whoever finds it in a diff");
 	// The entry is human-readable, so a reviewer can audit what was waved through.
 	const entry = Object.values(onDisk).find((v) => typeof v === "object");
-	assert.deepEqual(entry, { key: "common.no", code: "untranslated", src: "No", dst: "No" });
+	assert.equal(entry.key, "common.no");
+	assert.equal(entry.code, "untranslated");
+	assert.equal(entry.src, "No");
+	assert.equal(entry.dst, "No");
+	// Provenance: WHO signed this off, recorded so a bulk-written verdict is visible in the diff.
+	assert.equal(entry.by, "unknown", "an unclaimed verdict says so rather than borrowing a name");
+	assert.match(entry.at, /^\d{4}-\d{2}-\d{2}$/);
 
 	const loaded = loadAccepted(path);
 	assert.equal(Object.keys(loaded).length, 1, "_why must not be read back as an acceptance");

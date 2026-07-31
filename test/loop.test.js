@@ -52,6 +52,7 @@ test("the prompt carries every rule, and drops the empty slots", () => {
 		targetLang: "es",
 		doNotTranslate: ["JustWrite"],
 		conventionsLine: "Spanish opens questions with ¿",
+		pluralSeparator: "|",
 	});
 	assert.match(full, /en→es/);
 	assert.match(full, /untouchable placeholders/);
@@ -62,6 +63,25 @@ test("the prompt carries every rule, and drops the empty slots", () => {
 	const bare = buildSystemPrompt({ source: "en", targetLang: "fr" });
 	assert.doesNotMatch(bare, /never translate these terms/);
 	assert.doesNotMatch(bare, /; ;/, "an empty slot must not leave a dangling separator");
+});
+
+test("BITES: the plural rule is BUILT from the configured separator", () => {
+	// This rule was the literal string `" | "` for the whole life of the tool, which made
+	// pluralSeparator a half-honoured setting: checks.js split on YOUR value while the model
+	// was told about a pipe. On the default the two agreed by coincidence. On any other value
+	// the model had no reason to preserve your separator, and the checker then reported
+	// `plural-halves-lost` — the tool blaming the model for obeying the tool's own instruction.
+	const semi = buildSystemPrompt({ source: "en", targetLang: "de", pluralSeparator: ";;" });
+	assert.match(semi, /";;"/, "the prompt must name the separator the checks will enforce");
+	assert.doesNotMatch(semi, /" \| "/, "the old hardcoded pipe must be gone");
+});
+
+test("BITES: a catalogue with no plural forms is not told about a separator", () => {
+	// i18next keeps plurals as separate keys, so pluralSeparator is legitimately null. Telling
+	// the model that some character marks plural forms is then simply a false instruction.
+	const none = buildSystemPrompt({ source: "en", targetLang: "ja", pluralSeparator: null });
+	assert.doesNotMatch(none, /plural forms/);
+	assert.doesNotMatch(none, /; ;/, "dropping the rule must not leave a dangling separator");
 });
 
 test("the cache key changes when anything that could change the answer changes", () => {

@@ -29,16 +29,31 @@ The example is not reproduced here on purpose. A second copy of it in this file 
 thing to keep in step, and that is exactly the failure this page was written about — the
 example's own engine list had already drifted, naming five engines when eight ship.
 
-> **Known sharp edge.** `localesDir` resolves against the directory you run from, **not**
-> against the config file. That is why every command needs a `cd` into the project first, and
-> why a config cannot yet live in a shared folder. It is a real bug, not a convention.
+**Four fields.** `locales`, `targets`, `context`, `glossary`. Everything else is either read
+from your `en.json` or lives in the review workspace:
 
-Run it with:
+| used to be config | now |
+|---|---|
+| `localesDir`, `sourceLanguage` | derived from `locales` — its folder, its filename |
+| `placeholder` | read from `en.json` — `{n}` or `{{n}}` is visible in your own strings |
+| `pluralSeparator` | read from `en.json` — and `null` is a real answer |
+| engine, key, overrides | a **connection** in the workspace, so a key is never in a committed file |
+
+Inference never decides quietly: a run prints what it read, and an explicit value always wins.
+The older key names still work, so upgrading does not invalidate a config.
+
+> **The `cd` is gone.** Every path — locales, sidecars, cache, database — resolves against the
+> **config file's own directory**, never the shell's. Run from anywhere:
 
 ```bash
-cd path/to/your-app
-node path/to/just-ai-help/server/translate.js just-ai-help.config.json
+node path/to/just-ai-help/server/translate.js path/to/your-app/just-ai-help.config.json
 ```
+
+Until 2026-07-31 `localesDir` was resolved against the working directory. That is why every
+command in these docs began with a `cd`, and why running from the wrong folder silently began
+with **no cache** and re-translated the entire catalogue — 27 minutes and 464 hand-corrected
+keys, on a real run. `server/paths.js` owns this now, and `test/paths.test.js` runs the
+resolver from an unrelated directory so it cannot come back.
 
 ---
 
@@ -75,16 +90,34 @@ Read by `server/translate.js`, `server/server.js`, `server/terms.js`, `server/ac
 
 ---
 
-## What the tool WRITES beside your strings
+## What the tool WRITES
 
-These appear in your `localesDir`, next to `en.json`. You do not create them.
+Two different kinds of file, and they go to two different places on purpose.
+
+**Into your locale folder — app assets, loaded by your app:**
 
 | file | what it is | commit it? |
 |---|---|---|
-| `<lang>.json` | the translation — **the product** | yes |
-| `<lang>.accepted.json` | findings you judged correct, hashed over (key, code, source, target) so they expire when either string changes | yes |
-| `<lang>.notes.json` | per-key notes you wrote during review; sent with that key on its next translation | yes |
-| `<lang>.probe.json` | the second pass from `--probe`, used to find keys the model was unsure about | no |
+| `<lang>.json` | the translation — **the product**. In production this is the only thing that ships | yes |
+
+**Beside the config — the tool's memory, never loaded by your app:**
+
+| file | what it is | commit it? |
+|---|---|---|
+| `<lang>.accepted.json` | findings a reviewer judged correct, hashed over (key, code, source, target) so they expire when either string changes, plus `by`/`at` recording who signed off | yes |
+| `<lang>.notes.json` | per-key notes from review; sent with that key on its next translation, so a fix found once is not rediscovered | yes |
+| `<lang>.probe.json` | the second pass from `--probe` — a measurement | no |
+| `.jah-cache.json` | what has already been translated | no |
+| `.jah.db` | workshop state and your keys | no |
+
+**Why the split.** `locales/` has a contract: *these are the app's translations*. Review
+artefacts are not — nothing in the app reads them. Keeping them out is not tidiness: the fix
+for "adding a language needs three code edits" is to glob that folder, and a plain `*.json`
+glob over the old layout registers a phantom language called **`es.accepted`**.
+
+**Upgrading moves nothing.** A project that already keeps its sidecars in `locales/` keeps
+using it — the choice is made once for the whole project, so a catalogue is never split across
+two folders.
 
 ## What is NOT config, despite the extension
 

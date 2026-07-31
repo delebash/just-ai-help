@@ -184,11 +184,12 @@ test("term usage shows the distribution rather than asserting an answer", async 
 });
 
 test("a note is saved, read back, and undoable", async () => {
-	await withServer(async ({ api, locales }) => {
+	await withServer(async ({ api, dir }) => {
 		await api("PUT", "/api/notes", { lang: "es", key: "characterAudit.why", note: "a label, not a question" });
 		const rows = (await api("GET", "/api/rows?lang=es")).body.rows;
 		assert.equal(rows.find((r) => r.key === "characterAudit.why").note, "a label, not a question");
-		assert.ok(readFileSync(join(locales, "es.notes.json"), "utf8").includes("a label, not a question"));
+		// Sidecars live beside the CONFIG now, not inside locales/ — locales/ holds app assets only.
+		assert.ok(readFileSync(join(dir, "es.notes.json"), "utf8").includes("a label, not a question"));
 
 		await api("POST", "/api/undo", { lang: "es" });
 		const after = (await api("GET", "/api/rows?lang=es")).body.rows;

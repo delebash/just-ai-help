@@ -35,6 +35,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseFrontMatter } from "./frontmatter.js";
+import { projectPaths } from "./paths.js";
 
 const argv = process.argv.slice(2);
 const checkOnly = argv.includes("--check");
@@ -46,9 +47,11 @@ if (!existsSync(configPath)) {
 }
 const cfg = JSON.parse(readFileSync(configPath, "utf8"));
 
-const docsDir = resolve(cfg.docsDir ?? "docs");
-const localesDir = resolve(cfg.localesDir);
-const sourceFile = join(localesDir, `${cfg.sourceLanguage}.json`);
+// Paths anchored to the config file, not the working directory — see paths.js.
+const paths = projectPaths(configPath, cfg);
+const docsDir = resolve(paths.configDir, cfg.docsDir ?? "docs");
+const localesDir = paths.localesDir;
+const sourceFile = paths.sourceFile;
 const LEDE = cfg.ledePrefix ?? "lede";
 const HINTS = cfg.hintsPrefix ?? "hints";
 

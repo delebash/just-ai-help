@@ -74,7 +74,10 @@ const SIDECAR_WHY =
 	" against a fresh clone, so acceptances kept anywhere gitignored would be missing exactly where the" +
 	" gate needs them. Each entry is keyed by a hash of (key, code, source, target) — NEVER a per-key" +
 	" exemption — so changing the English or editing the translation brings the finding straight back." +
-	" Delete an entry to un-accept it. Every run prints how many were hidden.";
+	" Delete an entry to un-accept it. Every run prints how many were hidden." +
+	" `by` and `at` record WHO signed each one off: an entry written by a script or an agent says so," +
+	" and `unknown` means nobody claimed it. Provenance is outside the hash, so re-accepting under a" +
+	" different name updates the entry instead of adding a second one.";
 
 /** Writes the sidecar, metadata first, entries sorted so the diff is stable. */
 export function saveAccepted(path, entries) {
@@ -101,7 +104,37 @@ export function partitionAccepted(findings, accepted, sourceFlat, targetFlat) {
 	return { findings: kept, accepted: cleared };
 }
 
-/** Builds the stored entry for one finding — readable in a diff, so a reviewer can audit what was waved through. */
-export function acceptanceEntry({ key, code, src, dst }) {
-	return { key, code, src, dst };
+/**
+ * Who to record as the author of a verdict, when nobody said.
+ *
+ * "unknown" on purpose, and NOT the OS username. An automated run under a developer's account
+ * would inherit that name and become indistinguishable from the developer's own judgement,
+ * which is the exact failure this field exists to make visible.
+ */
+export const UNKNOWN_REVIEWER = "unknown";
+
+/**
+ * Builds the stored entry for one finding — readable in a diff, so a reviewer can audit what
+ * was waved through.
+ *
+ * `by` and `at` are PROVENANCE and are deliberately OUTSIDE the hash. The hash identifies the
+ * finding (key, code, source, target); who signed it off is metadata about that identity, so
+ * re-accepting the same finding under a different name updates one entry rather than creating
+ * a second one that suppresses the same thing twice.
+ *
+ * Why the field exists at all: on 2026-07-31 an agent wrote 58 verdicts into a real project's
+ * sidecar, in bulk, by script. The format could not distinguish them from a human's review,
+ * the file reads as "findings a reviewer judged correct", and nobody noticed until the repo
+ * owner happened to ask what they were. A `by` field does not prevent that — it makes it
+ * visible in the diff the moment it lands, which is the most a file format can do.
+ */
+export function acceptanceEntry({ key, code, src, dst, by, at }) {
+	return {
+		key,
+		code,
+		src,
+		dst,
+		by: by || UNKNOWN_REVIEWER,
+		at: at || new Date().toISOString().slice(0, 10),
+	};
 }

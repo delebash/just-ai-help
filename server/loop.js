@@ -79,12 +79,20 @@ export function restore(text, tokens) {
 // 5), and plural pipes (an engine that splits the halves apart translates them
 // inconsistently — every engine that saw the whole string kept the structure).
 
-export function buildSystemPrompt({ source, targetLang, doNotTranslate, conventionsLine }) {
+export function buildSystemPrompt({ source, targetLang, doNotTranslate, conventionsLine, pluralSeparator }) {
+	// The plural rule is BUILT FROM THE CONFIGURED SEPARATOR, and is omitted entirely when a
+	// catalogue has none. It used to be the literal string `" | "`, which made pluralSeparator
+	// a half-honoured setting: the checks split on your value while the model was told about a
+	// pipe. With the default the two agreed by coincidence; with ";" the model had no reason to
+	// preserve your separator and the checker then blamed it for `plural-halves-lost`.
+	const pluralRule = pluralSeparator
+		? `a string containing "${pluralSeparator}" holds plural forms — translate each half and keep the separator`
+		: "";
 	const rules = [
 		"tokens like ⟦0⟧ are untouchable placeholders — reproduce each exactly once",
 		doNotTranslate?.length ? `never translate these terms: ${doNotTranslate.join(", ")}` : "",
 		conventionsLine || "",
-		'a string containing " | " holds plural forms — translate each half and keep the separator',
+		pluralRule,
 		'an item may carry a "note" — it describes how that string is used; follow it',
 		"output ONLY JSON matching the schema",
 	].filter(Boolean);
@@ -340,6 +348,7 @@ export async function translateLanguage({
 		targetLang: lang,
 		doNotTranslate: cfg.glossary?.doNotTranslate,
 		conventionsLine,
+		pluralSeparator: cfg.pluralSeparator,
 	});
 
 	// Always LOAD the cache, even under --force. `force` means "re-translate these keys
