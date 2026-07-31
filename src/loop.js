@@ -85,9 +85,33 @@ export function buildSystemPrompt({ source, targetLang, doNotTranslate, conventi
 		doNotTranslate?.length ? `never translate these terms: ${doNotTranslate.join(", ")}` : "",
 		conventionsLine || "",
 		'a string containing " | " holds plural forms — translate each half and keep the separator',
+		'an item may carry a "note" — it describes how that string is used; follow it',
 		"output ONLY JSON matching the schema",
 	].filter(Boolean);
 	return `You are a professional software-UI translator, ${source}→${targetLang}. Rules: ${rules.join("; ")}.`;
+}
+
+/**
+ * The user half of one request: the catalogue's context line, then the items.
+ *
+ * PER-KEY NOTES live here. `cfg.context` is one sentence for the ENTIRE catalogue, so a
+ * four-character label and a two-hundred-character paragraph arrive with identical context.
+ * That is how `characterAudit.why` — EN `"Why:"`, a label above a reasoning block — came back
+ * as `"¿Por qué?"`, a question. Nothing told the model which it was, and no structural check
+ * could have known either.
+ *
+ * A note is written by a reviewer for a key they are ALREADY fixing, so it costs nothing until
+ * it is needed and the fix compounds instead of recurring on every future run. Only keys that
+ * have one carry the field, so batches do not grow for the 99% that need nothing.
+ *
+ * Exported so the behaviour is testable without a live engine.
+ */
+export function buildUserMessage({ shielded, cfg }) {
+	const items = shielded.map((s) => {
+		const note = cfg.notes?.[s.key];
+		return note ? { id: s.i, text: s.shielded, note } : { id: s.i, text: s.shielded };
+	});
+	return `Context: ${cfg.context ?? "a software application"}. Translate items: ${JSON.stringify(items)}`;
 }
 
 // The response contract. Both transports get the same schema — ids come back so a
@@ -347,9 +371,7 @@ export async function translateLanguage({
 	 */
 	async function attempt(group) {
 		const shielded = group.map((it, i) => ({ ...it, i, ...shield(it.text, re, cfg.glossary?.doNotTranslate ?? []) }));
-		const user = `Context: ${cfg.context ?? "a software application"}. Translate items: ${JSON.stringify(
-			shielded.map((s) => ({ id: s.i, text: s.shielded })),
-		)}`;
+		const user = buildUserMessage({ shielded, cfg });
 
 		const wait = (profile.rateLimitMs ?? 0) - (Date.now() - lastCall);
 		if (wait > 0) await sleep(wait);

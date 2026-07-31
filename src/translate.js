@@ -141,7 +141,9 @@ async function translateInto(
 		existingFlat: forceThese ? {} : existing,
 		lang,
 		profile,
-		cfg: { ...cfg, conventionsLine: conventions[lang]?.promptLine ?? "" },
+		// `notes` is the review workspace's feedback path: a note written while fixing a key is
+		// sent with that key next time, so the same defect does not have to be found twice.
+		cfg: { ...cfg, conventionsLine: conventions[lang]?.promptLine ?? "", notes: readNotes(lang) },
 		cachePath,
 		force: forceThese,
 		// Written after every batch, so an interrupted hour-long run resumes from where it
@@ -163,6 +165,23 @@ async function translateInto(
 
 /** Where the --probe pass keeps its second opinion for one language. */
 const probePath = (lang) => join(localesDir, `${lang}.probe.json`);
+
+/**
+ * Per-key notes written during review. Committed, unlike the probe sidecar, because a note
+ * changes translation output and so belongs with the run that produced it.
+ *
+ * Absent file = no notes, which is the normal case until someone reviews something.
+ */
+function readNotes(lang) {
+	const path = join(localesDir, `${lang}.notes.json`);
+	if (!existsSync(path)) return {};
+	try {
+		const raw = JSON.parse(readFileSync(path, "utf8"));
+		return Object.fromEntries(Object.entries(flatten(raw)).filter(([k]) => !k.startsWith("_")));
+	} catch {
+		return {};
+	}
+}
 /** Where a language's reviewer verdicts live. Committed, unlike the probe sidecar — see accepted.js. */
 const acceptedPath = (lang) => join(localesDir, `${lang}.accepted.json`);
 

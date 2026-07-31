@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TEMPERATURE, buildRequest, buildSystemPrompt, cacheKey, effectiveTemperature, restore, shield } from "../src/loop.js";
+import { TEMPERATURE, buildRequest, buildSystemPrompt, buildUserMessage, cacheKey, effectiveTemperature, restore, shield } from "../src/loop.js";
 import { placeholderRe } from "../src/jsonutil.js";
 
 const re = placeholderRe({ prefix: "{", suffix: "}" });
@@ -146,4 +146,36 @@ test("the openai-compat body: url gets only the endpoint, key becomes a bearer h
 
 test("an unknown profile kind fails loudly", () => {
 	assert.throws(() => buildRequest({ profile: { kind: "carrier-pigeon" }, system: "S", user: "U" }), /carrier-pigeon/);
+});
+
+// ── Per-key notes ───────────────────────────────────────────────────────────────────────
+//
+// The feedback loop that closes the review workspace: a note written while fixing a key is
+// sent WITH that key next time, so the same defect does not have to be found twice.
+//
+// This exists because `cfg.context` is one sentence for the whole catalogue, so a
+// four-character label and a two-hundred-character paragraph arrive with identical context.
+// That is how "Why:" — a label above a reasoning block — came back as "¿Por qué?".
+
+test("A NOTE IS ATTACHED TO ITS KEY AND TO NO OTHER", () => {
+	const msg = buildUserMessage({
+		shielded: [
+			{ i: 0, key: "characterAudit.why", shielded: "Why:" },
+			{ i: 1, key: "settings.save", shielded: "Save" },
+		],
+		cfg: { context: "an app", notes: { "characterAudit.why": "a label above the reasoning, not a question" } },
+	});
+	const items = JSON.parse(msg.match(/Translate items: (\[.*\])$/s)[1]);
+	assert.equal(items[0].note, "a label above the reasoning, not a question", "the noted key carries its note");
+	assert.ok(!("note" in items[1]), "an un-noted key must not carry one — batches stay small for the 99% that need nothing");
+});
+
+test("no notes at all changes nothing about the message", () => {
+	const shielded = [{ i: 0, key: "a", shielded: "Save" }];
+	assert.equal(buildUserMessage({ shielded, cfg: { context: "an app" } }), buildUserMessage({ shielded, cfg: { context: "an app", notes: {} } }));
+});
+
+test("the system prompt tells the model what a note IS", () => {
+	const p = buildSystemPrompt({ source: "en", targetLang: "es" });
+	assert.match(p, /note/, "a field the model is never told about is a field it ignores");
 });
