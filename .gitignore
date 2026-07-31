@@ -3,3 +3,11 @@ just-ai-help.config.json
 .jah-cache.json
 *.log
 .evidence/
+
+# The review workspace's store: review progress, undo history, proposals, run
+# history — and API KEYS. src/db.js refuses to save a key unless this line is
+# present, because "I assumed it was ignored" is how a key ends up published.
+.jah.db
+.jah.db-journal
+.jah.db-wal
+.jah.db-shm
