@@ -70,7 +70,7 @@ if (!existsSync(configPath)) {
 	process.exit(1);
 }
 const cfg = JSON.parse(readFileSync(configPath, "utf8"));
-const engines = JSON.parse(readFileSync(new URL("./engines.json", import.meta.url), "utf8"));
+const engines = JSON.parse(readFileSync(new URL("./config/engines.json", import.meta.url), "utf8"));
 
 const localesDir = resolve(cfg.localesDir);
 const sourceFile = join(localesDir, `${cfg.sourceLanguage}.json`);
@@ -80,7 +80,7 @@ const src = flatten(sourceRaw);
 // Conventions the target language requires regardless of what the source did. Read on both
 // paths: the loop puts `promptLine` in the prompt, the checks use `pairedPunct` to find out
 // whether the model listened. Shipped for Spanish only, on purpose.
-const conventions = JSON.parse(readFileSync(new URL("./conventions.json", import.meta.url), "utf8"));
+const conventions = JSON.parse(readFileSync(new URL("./config/conventions.json", import.meta.url), "utf8"));
 
 /** Resolves an engines.json row into a runnable profile, or exits with a usable message. */
 function resolveProfile(name, { applyConfigOverrides }) {

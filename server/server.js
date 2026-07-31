@@ -99,7 +99,7 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 	const cfg = JSON.parse(readFileSync(configPath, "utf8"));
 	const projectRoot = resolve(configPath, "..");
 	const localesDir = resolve(cfg.localesDir);
-	const conventions = JSON.parse(readFileSync(new URL("./conventions.json", import.meta.url), "utf8"));
+	const conventions = JSON.parse(readFileSync(new URL("./config/conventions.json", import.meta.url), "utf8"));
 	const langs = cfg.targets ?? [];
 
 	const db = injectedDb ?? openProject(projectRoot);

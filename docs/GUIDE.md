@@ -109,7 +109,7 @@ Edit the copy:
 - **`context`** — one sentence about your app. It goes in the prompt and genuinely changes
   word choice.
 - **`glossary.doNotTranslate`** — brand names and terms that must survive untouched.
-- **`engine`** — which row of `server/engines.json` to use. `"ollama"` is local with the default
+- **`engine`** — which row of `server/config/engines.json` to use. `"ollama"` is local with the default
   26B MoE; `"ollama-gemma3"` is local with the smaller `gemma3:12b`; `"gemini-free"` and
   `"openai"` are online. Each row already carries the right settings for the model it names, so
   switching model by switching *engine* is the option that cannot go wrong.

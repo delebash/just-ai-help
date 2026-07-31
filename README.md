@@ -49,6 +49,9 @@ npm run build:ui                                       # rebuild the UI (develop
 > to pull for your machine, the commands, the workflow, and when to use an online engine. This
 > README is the long version: why every piece works the way it does.
 >
+> **Confused by the config files?** [`docs/CONFIG.md`](docs/CONFIG.md) lists every one, what
+> reads it, and which single file is yours to edit.
+>
 > **Picking up development?** [`docs/HANDOFF.md`](docs/HANDOFF.md) is the current state: the
 > measured results, what is open, and which record wins when two disagree.
 
@@ -72,7 +75,7 @@ exactly once is a failure that gets retried, not a result.
 
 ## What this adds
 
-### 1. Engine profiles (`server/engines.json`)
+### 1. Engine profiles (`server/config/engines.json`)
 
 Per-provider facts a generic translator cannot hold. Every field in that file comes from a
 real failure, not from documentation:
@@ -351,7 +354,7 @@ visible to whoever reads the report. To un-accept, delete the entry.
 
 **What this deliberately is not** is a per-language list of "words that are identical in
 Spanish". That was the first design and it was wrong twice over: it only ever fixed one check
-(the benign `brackets` gloss above needs the same disposal), and `conventions.json` already
+(the benign `brackets` gloss above needs the same disposal), and `server/config/conventions.json` already
 warns, about itself, that language rules written from memory are "exactly how a confident wrong
 rule ends up applied to every future translation."
 

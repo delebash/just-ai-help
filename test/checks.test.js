@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { buildContext, checkOne, runChecks } from "../server/checks.js";
 
-const conventions = JSON.parse(readFileSync(new URL("../server/conventions.json", import.meta.url), "utf8"));
+const conventions = JSON.parse(readFileSync(new URL("../server/config/conventions.json", import.meta.url), "utf8"));
 
 const cfg = {
 	placeholder: { prefix: "{", suffix: "}" },

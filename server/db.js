@@ -390,7 +390,7 @@ export const DB_FILE = ".jah.db";
 export function openProject(projectRoot, { enginesPath } = {}) {
 	const root = resolve(projectRoot);
 	const db = openDb(join(root, DB_FILE));
-	const engines = JSON.parse(readFileSync(enginesPath ?? new URL("./engines.json", import.meta.url), "utf8"));
+	const engines = JSON.parse(readFileSync(enginesPath ?? new URL("./config/engines.json", import.meta.url), "utf8"));
 	seedProviders(db, engines);
 	loadSecretsIntoEnv(db);
 	return db;
