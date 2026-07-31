@@ -296,6 +296,10 @@ export async function translateLanguage({
 	force = false,
 	log = console.log,
 	onBatch,
+	// An AbortSignal, checked on batch boundaries. Absent means "run to completion", which is
+	// what every CLI path passes — cancellation exists for the review workspace, where a
+	// 50-minute job needs a stop button that does not corrupt anything.
+	signal,
 }) {
 	const re = placeholderRe(cfg.placeholder);
 	const contextHash = sha1(cfg.context ?? "");
@@ -368,6 +372,15 @@ export async function translateLanguage({
 	}
 
 	for (const [bi, batch] of batches.entries()) {
+		// Cancellation is checked between batches, never inside one. A batch already in flight
+		// has been paid for, and abandoning its response would throw away work the engine has
+		// done — worse, it would leave `values` holding keys whose cache entry was never
+		// written. Stopping on a boundary keeps the same guarantee the crash-resume path has:
+		// whatever is in `values` is complete and consistent.
+		if (signal?.aborted) {
+			log(`  ${lang}: cancelled after ${bi} of ${batches.length} batch(es)`);
+			return { values, failed, requests, cancelled: true };
+		}
 		let pending = batch;
 		for (let tryNo = 1; tryNo <= 3 && pending.length; tryNo++) {
 			try {
