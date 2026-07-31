@@ -185,29 +185,57 @@ Your locale JSON, acceptances and notes stay ordinary committed files — you ca
 the JSON. Review progress, undo history and engine connections live in `.jah.db`, which is
 gitignored; deleting it loses your place, never your work.
 
-**3b — Some flags are not defects.** In Spanish the correct translation of "No" is "No", and
-`untranslated` will say so every single run. Left alone, that means a *perfect* catalogue can
-never pass `--check-only` — and a gate that cannot go green is a gate people stop reading. So
-when a finding is correct output, record that verdict: press **correct as-is** on the row, or
-run `--accept`:
+**3b — Some flags are not defects.** Start with the distinction, because the name misleads:
+
+- **Corrected** — the translation was wrong. You edit it, and the finding disappears by itself.
+  **Nothing is recorded.**
+- **Accepted** — you changed *nothing*. The translation was already right and the *check* was
+  wrong to flag it. In Spanish the correct translation of "No" is "No".
+
+Only the second case is written down. Here is why it has to be.
+
+**The checks have no memory.** They re-read the files from scratch on every run, so `"General"`
+→ `"General"` trips `untranslated` today, tomorrow, and on run 500. Nothing about that string
+will ever change on its own. Without a recorded verdict you get the same findings every single
+time, `--check-only` is permanently red, and within a week nobody reads the output. A gate that
+cannot go green is a gate people stop reading.
+
+So an acceptance is not an exemption and not a to-do item. It is **the memory that stops the
+same question being asked forever.**
 
 ```bash
 node src/translate.js config.json --accept common.no,settings.sections.general
 ```
 
-Either way it lands in `<lang>.accepted.json` next to your locale files. **Commit that file** —
-it is a project decision, not a measurement.
+Or press **correct as-is** on the row in the review workspace. Either way it lands in
+`<lang>.accepted.json`. **Commit that file** — it is a project decision, not a measurement, and
+it has to be in the repo because `--check-only` runs in CI against a fresh clone. Acceptances
+kept anywhere gitignored would be absent there, and the gate would be red on every build.
 
-Three things worth knowing about it:
+**It reopens itself when it should.** That is why the entry is a hash of the key, the check, the
+English *and* the translation — not just the key:
+
+> Today the English is `"General"` and the Spanish is `"General"`. You rule it correct.
+>
+> Later someone changes the English to `"General settings"`. Whoever updates the catalogue
+> copies the English across, so the Spanish becomes `"General settings"` too — a genuinely
+> untranslated string.
+>
+> Source and target match again, so it is flagged. Your ruling covered `"General"`/`"General"`,
+> so the hash no longer matches and **the finding fires.** You get told.
+
+A simpler design — "ignore key `settings.sections.general`" — would have stayed quiet and
+shipped English text inside the Spanish build indefinitely. That is the failure this shape
+exists to prevent, and it is why it is never a per-key exemption.
+
+Two smaller guarantees:
 
 - It is **per finding, not per key.** Accepting `untranslated` on a key does not silence a
-  placeholder bug that shows up there later.
-- It **expires by itself.** The entry is keyed by a hash of the English *and* the translation,
-  so if either changes the finding comes straight back. Change `"General"` to
-  `"General settings"` and forget to translate it, and you get told.
-- It is **never silent.** Every run prints `N accepted as correct`, at zero or otherwise.
+  placeholder bug that shows up on the same key later.
+- It is **never silent.** Every run prints `N accepted as correct`, at zero or otherwise, so a
+  suppression can never be invisible.
 
-To un-accept something, delete its entry from the file.
+To un-accept something, delete its entry from the file — or use the workspace, which can undo it.
 
 **4 — CI.** `--check-only` re-runs every check against the files already committed. No engine,
 no network, no API key. It exits non-zero if anything is wrong.

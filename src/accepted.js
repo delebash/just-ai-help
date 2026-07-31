@@ -66,10 +66,15 @@ export function loadAccepted(path) {
 }
 
 const SIDECAR_WHY =
-	"Findings a reviewer judged CORRECT, not defects. Written by `--accept <key>` or the review page's" +
-	" \"correct as-is\" button. Each entry is keyed by a hash of (key, code, source, target): change the" +
-	" English or edit the translation and the finding comes back, because the acceptance was about those" +
-	" exact strings. Delete an entry to un-accept it. The run always prints how many were hidden.";
+	"Findings a reviewer judged CORRECT. NOTHING here was fixed — fixing a translation makes its finding" +
+	" disappear on its own and records nothing. These are the opposite case: the translation was already" +
+	" right and the CHECK was wrong to flag it (the Spanish for 'No' is 'No'). They are written down" +
+	" because the checks have no memory — they re-read the files from scratch every run, so without this" +
+	" the same findings fire forever and --check-only can never go green. Committed on purpose: CI runs" +
+	" against a fresh clone, so acceptances kept anywhere gitignored would be missing exactly where the" +
+	" gate needs them. Each entry is keyed by a hash of (key, code, source, target) — NEVER a per-key" +
+	" exemption — so changing the English or editing the translation brings the finding straight back." +
+	" Delete an entry to un-accept it. Every run prints how many were hidden.";
 
 /** Writes the sidecar, metadata first, entries sorted so the diff is stable. */
 export function saveAccepted(path, entries) {

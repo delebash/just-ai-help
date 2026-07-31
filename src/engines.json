@@ -1,6 +1,8 @@
 {
   "_why": "Per-provider facts a generic translator cannot know. Each of these caused a real failure on 2026-07-27: a stale model id 404'd 19/40 keys, a thinking model with no token headroom returned empty content, and OpenAI's 120ms default rate-limit was applied to a provider with a ~15 RPM tier. Add a provider by adding a row.",
 
+  "_seed_note": "THIS FILE IS THE SEED, NOT YOUR CONFIG. Since 2026-07-31 these rows are loaded into the `providers` table of .jah.db on every start, replacing it wholesale — so a moved endpoint or a stale model id is fixed for everyone by updating the tool. YOUR settings (which provider you picked, your key, any field you overrode) live in the `connections` table and are never touched by that reseed. Edit this file to add a provider to the menu; edit a connection in the review workspace to change what you personally run.",
+
   "_schema": {
     "_note": "PROFILE SCHEMA v2 — the shape the owned translate loop reads. Every field below is DATA, which is the whole point: every failure of 2026-07-27 (--think, chat_template_kwargs, a stale model id, the wrong rate limit) had one disease, that the request body belonged to somebody else and we could not reach it. `extraBody` is the general cure — it merges into the request verbatim, so `think:false`, `chat_template_kwargs.enable_thinking` and `reasoning_effort` become config rather than code.",
     "kind": "\"openai-compat\" (POST {url}/chat/completions) or \"ollama\" (POST {url}/api/chat). Two transports, both proven accepted 2026-07-27.",
@@ -62,6 +64,36 @@
     "_setup": "ollama serve   then:   ollama pull gemma3:12b"
   },
 
+  "mistral": {
+    "kind": "openai-compat",
+    "url": "https://api.mistral.ai/v1",
+    "model": "REQUIRED — pick one from docs.mistral.ai/getting-started/models, e.g. mistral-small-4-0-26-03",
+    "apiKeyEnv": "MISTRAL_API_KEY",
+    "batchSize": 24,
+    "rateLimitMs": 1000,
+    "timeoutMs": 120000,
+    "maxOutputTokens": 16000,
+    "_note": "Larger free allowance than Groq on the Experiment tier (~1B tokens/month, reported not measured) — but it REQUIRES opting into training on your data, which is a real cost wearing a free label. Read that before choosing it over Groq.",
+    "_measured": "NOTHING. Never run.",
+    "_verified_2026_07_31": "The endpoint returns 401 rather than 404, so the URL is right. The MODEL ID IS DELIBERATELY 'REQUIRED': Mistral's catalogue is dated (mistral-small-4-0-26-03 and similar) and rotates, and writing a dated id here that expires is exactly the failure this file's first line records. Look it up when you configure it.",
+    "_setup": "console.mistral.ai for a key, then set `model` on the connection."
+  },
+
+  "openrouter": {
+    "kind": "openai-compat",
+    "url": "https://openrouter.ai/api/v1",
+    "model": "REQUIRED — a catalogue slug like `meta-llama/llama-3.3-70b-instruct`; a `:free` suffix selects a free variant",
+    "apiKeyEnv": "OPENROUTER_API_KEY",
+    "batchSize": 24,
+    "rateLimitMs": 1000,
+    "timeoutMs": 120000,
+    "maxOutputTokens": 16000,
+    "_note": "One key, many providers' models — useful for trying a different model family against the same catalogue without a new account each time. Published free tier is ~1,000 requests/day across models carrying the `:free` suffix.",
+    "_measured": "NOTHING. Never run.",
+    "_verified_2026_07_31": "Endpoint returns 401 rather than 404. The model id is REQUIRED because OpenRouter's slugs are a live catalogue, not a fixed list — pick one from openrouter.ai/models.",
+    "_setup": "openrouter.ai for a key, then set `model` on the connection."
+  },
+
   "local-openai-compatible": {
     "kind": "openai-compat",
     "url": "http://127.0.0.1:8080/v1",
@@ -72,6 +104,23 @@
     "maxOutputTokens": 16000,
     "_note": "Any OpenAI-compatible server — llama.cpp's llama-server, LM Studio, vLLM. Override `url` in your config to match yours. A raw llama-server must be started with --reasoning off (or --reasoning-budget 0), or given the equivalent via extraBody: a thinking model returns EMPTY content otherwise, because deliberation fills message.reasoning_content and the token budget runs out before any answer is written.",
     "_timeout_why": "same reasoning as the ollama row — local generation, smaller batch."
+  },
+
+  "groq": {
+    "kind": "openai-compat",
+    "url": "https://api.groq.com/openai/v1",
+    "model": "llama-3.3-70b-versatile",
+    "apiKeyEnv": "GROQ_API_KEY",
+    "batchSize": 24,
+    "rateLimitMs": 2100,
+    "timeoutMs": 120000,
+    "maxOutputTokens": 16000,
+    "_note": "THE FREE ONLINE OPTION. A Groq key costs nothing and needs no credit card — sign up at console.groq.com with email, GitHub or Google. Published free tier: 30 requests/minute, and ~14,400 requests/day on llama-3.1-8b-instant. The 2,039-key JustWrite catalogue is ~128 requests at batch 24, so a whole catalogue is well inside one day's allowance.",
+    "_measured": "NOTHING. This row has never been run. Every timing and quality claim elsewhere in this file came from a measurement; this one has none, so it is not a recommendation — it is a starting point. Run the 40-key corpus before believing anything about it.",
+    "_verified_2026_07_31": "The endpoint and model ids were checked, not remembered: POST https://api.groq.com/openai/v1/chat/completions returns 401 (exists, wants a key) rather than 404, and `llama-3.3-70b-versatile` / `llama-3.1-8b-instant` are listed as production models in Groq's own docs with 131k context. A stale model id is the failure that 404'd 19 of 40 keys on 2026-07-27, so these were not written from memory.",
+    "_model_why": "llama-3.3-70b-versatile for quality; switch to `llama-3.1-8b-instant` for the much larger daily allowance if you are translating a big catalogue rather than escalating a handful of keys.",
+    "_rate_why": "30 requests/minute published = one per 2s. 2100ms leaves a margin, because a 429 mid-run costs a retry and the whole point of a rate limit field is that the wrong one burns the run — measured on a different provider on 2026-07-27.",
+    "_setup": "Get a free key at console.groq.com, then add a connection in the review workspace (or set GROQ_API_KEY)."
   },
 
   "openai": {

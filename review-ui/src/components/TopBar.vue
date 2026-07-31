@@ -63,23 +63,22 @@ async function run() {
         <span>Translating {{ s.job.done }} / {{ s.job.total }}</span>
         <span class="bar"><i :style="{ width: `${pct}%` }" /></span>
       </span>
-      <UiButton size="small" variant="danger-outline" @click="s.cancelJob()">Cancel</UiButton>
+      <UiButton size="small" intent="danger-outline" @click="s.cancelJob()">Cancel</UiButton>
     </template>
 
     <template v-else>
       <span style="font-size:12px;color:var(--muted)">Re-translate</span>
-      <UiSelect v-model="scope" :options="SCOPES" size="small" style="min-width:150px" />
+      <UiSelect v-model="scope" :options="SCOPES" width="name" />
       <span style="font-size:12px;color:var(--muted)">with</span>
       <UiSelect
         v-model="connectionId"
         :options="connections.map(c => ({ value: c.id, label: c.label }))"
-        size="small"
-        style="min-width:130px"
+        width="name"
         placeholder="no engine"
       />
-      <UiButton size="small" variant="primary" :disabled="!connectionId" @click="run">Start</UiButton>
+      <UiButton size="small" intent="primary" :disabled="!connectionId" @click="run">Start</UiButton>
     </template>
 
-    <UiButton size="small" variant="ghost" title="Undo last action (u)" @click="s.undo()">Undo</UiButton>
+    <UiButton size="small" intent="ghost" title="Undo last action (u)" @click="s.undo()">Undo</UiButton>
   </header>
 </template>

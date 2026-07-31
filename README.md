@@ -238,10 +238,28 @@ history, proposals, run history and engine connections.
 
 ### Some findings are correct — `--accept`
 
+The name misleads, so start with the distinction. **Correcting** a translation and **accepting**
+a finding are opposites:
+
+|  | what you did | what gets stored |
+|---|---|---|
+| **Corrected** | edited the translation, because it was wrong | nothing — the finding disappears by itself |
+| **Accepted** | changed nothing, because it was already right | a verdict, because the check will ask again |
+
 Not every flag is a defect. The correct Spanish for `"No"` is `"No"`, and `untranslated` will
 say so on every run, forever. Left alone that has a consequence worse than noise: **a perfect
 catalogue can never exit 0**, and `--check-only` is the CI gate. A gate that cannot go green is
 one people stop reading, which is precisely how the next real miss ships.
+
+The reason a verdict has to be *stored* rather than just acted on: **the checks have no memory.**
+They re-read the files from scratch every run, so a string that is legitimately identical to its
+source trips the same check today, tomorrow and on run 500 — nothing about it will ever change on
+its own. An acceptance is not an exemption and not a to-do; it is the memory that stops the same
+question being asked forever.
+
+It is committed for a concrete reason too: `--check-only` runs in CI against a **fresh clone**, so
+acceptances held anywhere gitignored would be absent exactly where the gate reads them, and every
+build would be red.
 
 Measured on the JustWrite catalogue, 2026-07-30 — across two full runs the checks separated
 sharply by precision:

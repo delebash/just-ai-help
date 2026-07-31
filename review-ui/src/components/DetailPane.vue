@@ -79,13 +79,13 @@ async function commit() {
 	if (!sel.value || draft.value === sel.value.target) return;
 	const row = sel.value;
 	await s.save(row, draft.value);
-	pushToast({ title: "Saved", description: row.key, action: { label: "Undo", onClick: () => s.undo() } });
+	pushToast({ title: "Saved", description: row.key, action: { label: "Undo", fn: () => s.undo() } });
 }
 
 async function doAccept() {
 	const row = sel.value;
 	await s.accept(row);
-	pushToast({ title: "Accepted as correct", description: row.key, action: { label: "Undo", onClick: () => s.unaccept(row) } });
+	pushToast({ title: "Accepted as correct", description: row.key, action: { label: "Undo", fn: () => s.unaccept(row) } });
 }
 
 async function saveNote() {
@@ -161,8 +161,8 @@ defineExpose({ focusEditor: () => document.querySelector("textarea.tgt")?.focus(
         <div class="opinion">
           <div class="val">{{ proposal.value }}</div>
           <header>
-            <UiButton size="small" variant="secondary" @click="useValue(proposal.value)">Use this</UiButton>
-            <UiButton size="small" variant="ghost" @click="s.discardProposal(sel)">Discard</UiButton>
+            <UiButton size="small" intent="secondary" @click="useValue(proposal.value)">Use this</UiButton>
+            <UiButton size="small" intent="ghost" @click="s.discardProposal(sel)">Discard</UiButton>
           </header>
         </div>
       </div>
@@ -172,7 +172,7 @@ defineExpose({ focusEditor: () => document.querySelector("textarea.tgt")?.focus(
         <div class="opinion">
           <header>
             <span>Google Translate</span>
-            <UiButton size="small" variant="ghost" style="margin-left:auto" @click="showGoogle = !showGoogle">
+            <UiButton size="small" intent="ghost" style="margin-left:auto" @click="showGoogle = !showGoogle">
               {{ showGoogle ? 'Hide' : 'Show' }}
             </UiButton>
           </header>
@@ -192,7 +192,7 @@ defineExpose({ focusEditor: () => document.querySelector("textarea.tgt")?.focus(
         <div class="opinion">
           <header>
             <span>Back-translation</span>
-            <UiButton size="small" variant="ghost" style="margin-left:auto" :loading="backBusy" @click="backtranslate">
+            <UiButton size="small" intent="ghost" style="margin-left:auto" :loading="backBusy" @click="backtranslate">
               {{ back ? 'Again' : 'Read it back' }}
             </UiButton>
           </header>
@@ -218,10 +218,10 @@ defineExpose({ focusEditor: () => document.querySelector("textarea.tgt")?.focus(
       </div>
 
       <div class="actions">
-        <UiButton variant="primary" @click="doAccept">Accept as correct</UiButton>
-        <UiButton v-if="sel.flags.some(f => f.code !== 'missing')" variant="secondary" @click="s.unaccept(sel)">Un-accept</UiButton>
-        <UiButton variant="ghost" @click="s.move(1)">Skip</UiButton>
-        <UiButton variant="ghost" style="margin-left:auto" @click="s.undo()">Undo last</UiButton>
+        <UiButton intent="primary" @click="doAccept">Accept as correct</UiButton>
+        <UiButton v-if="sel.flags.some(f => f.code !== 'missing')" intent="secondary" @click="s.unaccept(sel)">Un-accept</UiButton>
+        <UiButton intent="ghost" @click="s.move(1)">Skip</UiButton>
+        <UiButton intent="ghost" style="margin-left:auto" @click="s.undo()">Undo last</UiButton>
       </div>
     </template>
   </section>
