@@ -13,9 +13,9 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { openDb, seedProviders, DB_FILE } from "../src/db.js";
-import { JobManager } from "../src/jobs.js";
-import { proposals, proposalCount, runHistory } from "../src/store.js";
+import { openDb, seedProviders, DB_FILE } from "../server/db.js";
+import { JobManager } from "../server/jobs.js";
+import { proposals, proposalCount, runHistory } from "../server/store.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jah-jobs-"));
 const fresh = () => openDb(join(tmp(), DB_FILE));

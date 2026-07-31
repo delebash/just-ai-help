@@ -8,7 +8,7 @@ import { computed, onMounted, ref } from "vue";
 import UiButton from "@delebash/llm-ui/common/components/UiButton.vue";
 import UiSelect from "@delebash/llm-ui/common/components/UiSelect.vue";
 import { pushToast } from "@delebash/llm-ui/common/services/toastBridge.js";
-import { api } from "@/api.js";
+import { api } from "@/services/api.js";
 import { useReview } from "@/stores/review.js";
 
 const s = useReview();

@@ -15,7 +15,7 @@ Read branch and commit state from git, never from this file.
 | 1a | `store.js` (review state, undo log, proposals, runs) + `terms.js` | `05b01dc` |
 | 2 | `jobs.js` — progress, cancel, rejoin, proposals-only | `9de86c5` |
 | 1b | `server.js` — the whole API over HTTP | `b29cca5` |
-| 3 | `review-ui/` Vue 3 app + committed `dist` + staleness guard | `2abb601` |
+| 3 | `ui/` Vue 3 app + committed `dist` + staleness guard | `2abb601` |
 | 5 | per-key notes feeding the next run | `bc87719` |
 | 4 | back-translation — endpoint, cache, panel, `b` key | this commit |
 | 6 | docs — README, GUIDE, CLAUDE.md | this commit |

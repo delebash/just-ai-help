@@ -13,7 +13,7 @@ import { computed, ref, watch } from "vue";
 import UiButton from "@delebash/llm-ui/common/components/UiButton.vue";
 import UiTextarea from "@delebash/llm-ui/common/components/UiTextarea.vue";
 import { pushToast } from "@delebash/llm-ui/common/services/toastBridge.js";
-import { api, gtFrameUrl } from "@/api.js";
+import { api, gtFrameUrl } from "@/services/api.js";
 import { useReview } from "@/stores/review.js";
 
 const s = useReview();

@@ -26,21 +26,21 @@ them.
 
 | | file | what it is |
 |---|---|---|
-| 0. **Author** | `src/extract.js` | docs front-matter (`lede:` / `hints:`) → locale keys, so one sentence serves the article, the lede and the hint |
-| 1. **Translate** | `src/loop.js` | the batch loop — shielding, batching, retry, cache, two transports. Commodity, and ours anyway, for the reason below |
-| 2. **Verify** | `src/checks.js` + `src/suspects.js` | the checks (form) and `--probe` (meaning). **The differentiator** — nothing else does content QA on what a translator wrote |
-| 3. **Review** | `src/review.js` + `src/server.js` + `review-ui/` | the workspace: queue, second opinion, re-translate, undo, notes — all languages at once |
+| 0. **Author** | `server/extract.js` | docs front-matter (`lede:` / `hints:`) → locale keys, so one sentence serves the article, the lede and the hint |
+| 1. **Translate** | `server/loop.js` | the batch loop — shielding, batching, retry, cache, two transports. Commodity, and ours anyway, for the reason below |
+| 2. **Verify** | `server/checks.js` + `server/suspects.js` | the checks (form) and `--probe` (meaning). **The differentiator** — nothing else does content QA on what a translator wrote |
+| 3. **Review** | `server/review.js` + `server/server.js` + `ui/` | the workspace: queue, second opinion, re-translate, undo, notes — all languages at once |
 
 ```bash
-node src/translate.js config.json                    # translate what changed, then check
-node src/translate.js config.json --check-only       # check the files on disk. No engine. CI.
-node src/translate.js config.json --force            # re-translate everything
-node src/translate.js config.json --probe             # translate twice, flag where they disagree
-node src/translate.js config.json --escalate <prof>   # re-run ONLY the flagged keys, elsewhere
-node src/translate.js config.json --accept <key,key>  # record findings as reviewed-and-correct
-node src/extract.js   config.json                     # docs front-matter -> locale keys
-node src/extract.js   config.json --check             # CI: fail if those keys are stale
-node src/review.js    config.json                     # the review workspace at :4780
+node server/translate.js config.json                    # translate what changed, then check
+node server/translate.js config.json --check-only       # check the files on disk. No engine. CI.
+node server/translate.js config.json --force            # re-translate everything
+node server/translate.js config.json --probe             # translate twice, flag where they disagree
+node server/translate.js config.json --escalate <prof>   # re-run ONLY the flagged keys, elsewhere
+node server/translate.js config.json --accept <key,key>  # record findings as reviewed-and-correct
+node server/extract.js   config.json                     # docs front-matter -> locale keys
+node server/extract.js   config.json --check             # CI: fail if those keys are stale
+node server/review.js    config.json                     # the review workspace at :4780
 npm test                                               # node --test, 144 tests
 npm run build:ui                                       # rebuild the UI (developers only)
 ```
@@ -58,7 +58,7 @@ Every quality failure measured on 2026-07-27 had one cause: **the request body b
 somebody else and we could not reach it.** A thinking flag we could not send, a
 `chat_template_kwargs` we could not set, a stale model id baked into a constant, a rate limit
 tuned for a different provider — one disease, four symptoms. So the request body is now a
-literal object in `src/loop.js`, and every provider quirk is a field in a profile
+literal object in `server/loop.js`, and every provider quirk is a field in a profile
 (`extraBody` merges into the body verbatim).
 
 The one adoption candidate that got a fair, timeboxed spike — `lingo.dev`, Apache-2.0, 5.4k
@@ -72,7 +72,7 @@ exactly once is a failure that gets retried, not a result.
 
 ## What this adds
 
-### 1. Engine profiles (`src/engines.json`)
+### 1. Engine profiles (`server/engines.json`)
 
 Per-provider facts a generic translator cannot hold. Every field in that file comes from a
 real failure, not from documentation:
@@ -167,7 +167,7 @@ a day.
 
 **If 15 GB will not fit**, use `"engine": "ollama-gemma3"` for `gemma3:12b` at 8.1 GB — equally
 free of real errors, 2.3× slower, and the default until 2026-07-29. Or set `"model"` to
-anything else `ollama list` shows; see *Measured* below or `src/models.json` for what each
+anything else `ollama list` shows; see *Measured* below or `server/models.json` for what each
 choice costs you.
 
 This uses the **native** Ollama engine rather than Ollama's OpenAI-compatible `/v1`, because
@@ -198,7 +198,7 @@ implementation), to save you one Ollama install.
 ### The review workspace
 
 ```bash
-node src/review.js just-ai-help.config.json    # http://localhost:4780
+node server/review.js just-ai-help.config.json    # http://localhost:4780
 ```
 
 A three-pane workspace: a queue of buckets with live counts, a key list, and a detail panel
@@ -310,7 +310,7 @@ disagreed badly (spread ≥ 0.5), including the gender split at the root of a fe
 inconsistency.
 
 That is a real limit on `rankSuspects`, and it is worth stating plainly: spread measures
-*disagreement*, and a semantic misreading can be one word. The header comment in `src/suspects.js`
+*disagreement*, and a semantic misreading can be one word. The header comment in `server/suspects.js`
 records the two planted defects ranking **#1 and #3** on the original 40-key corpus. **That result
 does not hold at 1,965 keys.**
 
@@ -329,7 +329,7 @@ translation too.
 `General`, `App`, `Error`, `ID`, `auto`, `total`. Press **correct as-is** in the review page, or:
 
 ```bash
-node src/translate.js config.json --accept common.no,settings.sections.general
+node server/translate.js config.json --accept common.no,settings.sections.general
 ```
 
 Either writes `<lang>.accepted.json` beside the locale files. Commit it: a reviewer's judgement
@@ -367,7 +367,7 @@ by hand and later runs leave it alone. `--force` overrides the whole delta.
 ### Find the errors the checks cannot see — `--probe`
 
 ```bash
-node src/translate.js config.json --probe
+node server/translate.js config.json --probe
 ```
 
 Every check above is about **form**. A translation can satisfy all of them and still be
@@ -436,7 +436,7 @@ exactly like a run that worked.
 ### Escalate the flagged keys to a better engine
 
 ```bash
-node src/translate.js config.json --escalate <engine-profile>
+node server/translate.js config.json --escalate <engine-profile>
 ```
 
 Checks what is on disk, re-translates **only the keys the checks flagged** with the named
@@ -460,8 +460,8 @@ outcome rather than a hidden one.
 ## Author once, in the docs — `extract`
 
 ```bash
-node src/extract.js config.json            # write the generated keys into the source locale
-node src/extract.js config.json --check    # CI: fail if they are stale. Writes nothing.
+node server/extract.js config.json            # write the generated keys into the source locale
+node server/extract.js config.json --check    # CI: fail if they are stale. Writes nothing.
 ```
 
 The same sentence usually gets written three times: in the help article, as the surface's
@@ -575,7 +575,7 @@ download, which is a disk cost and does not outrank a measured accuracy *and* sp
 genuinely gates it is **memory** — ~15 GB across VRAM and system RAM, measured on 8 GB VRAM
 plus 32 GB system RAM. More VRAM only helps; 16 GB of system RAM with no large card is the
 untested case, and `"engine": "ollama-gemma3"` is the answer there. Note that the tier names in
-`src/models.json` are VRAM, which is not the constraint this model is bounded by.
+`server/models.json` are VRAM, which is not the constraint this model is bounded by.
 
 ### The cloud row (not re-measured on 2026-07-28)
 

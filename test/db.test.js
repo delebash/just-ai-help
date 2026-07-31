@@ -35,7 +35,7 @@ import {
 	schemaVersion,
 	seedProviders,
 	setPref,
-} from "../src/db.js";
+} from "../server/db.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jah-db-"));
 const fresh = () => openDb(join(tmp(), DB_FILE));

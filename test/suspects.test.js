@@ -8,8 +8,8 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TEMPERATURE } from "../src/loop.js";
-import { rankSuspects, spread } from "../src/suspects.js";
+import { TEMPERATURE } from "../server/loop.js";
+import { rankSuspects, spread } from "../server/suspects.js";
 
 const codesFor = (findings) => findings.map((f) => f.code);
 const keysOf = (findings) => findings.map((f) => f.key);

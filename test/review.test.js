@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { DEFAULT_UI, createReviewServer } from "../src/review.js";
+import { DEFAULT_UI, createReviewServer } from "../server/review.js";
 
 const EN = { nav: { chapters: "Chapters" }, settings: { save: "Save" }, chapters: { title: "Delete this chapter?" } };
 const ES = { nav: { chapters: "Capítulos" }, settings: { save: "Guardar" }, chapters: { title: "¿Eliminar este capítulo?" } };

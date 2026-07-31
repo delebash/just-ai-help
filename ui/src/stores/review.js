@@ -3,7 +3,7 @@
 
 import { computed, reactive, ref } from "vue";
 import { defineStore } from "pinia";
-import { api, jobStream } from "@/api.js";
+import { api, jobStream } from "@/services/api.js";
 
 /** Bucket definitions for the queue. `match` decides which rows a bucket contains. */
 export const BUCKETS = [

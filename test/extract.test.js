@@ -16,7 +16,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-const EXTRACT = fileURLToPath(new URL("../src/extract.js", import.meta.url));
+const EXTRACT = fileURLToPath(new URL("../server/extract.js", import.meta.url));
 
 /** A temp app: docs/ + locales/en.json + a config. Returns its paths. */
 function fixture({ docs, en }) {

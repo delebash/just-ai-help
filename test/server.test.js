@@ -19,7 +19,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { createWorkspaceServer } from "../src/server.js";
+import { createWorkspaceServer } from "../server/server.js";
 
 const EN = {
 	nav: { chapters: "Chapters", strands: "Strands" },
@@ -329,7 +329,7 @@ test("back-translating an untranslated key 404s", async () => {
 
 test("a cached back-translation is served without touching an engine", async () => {
 	await withServer(async ({ api, server }) => {
-		const { putReference } = await import("../src/store.js");
+		const { putReference } = await import("../server/store.js");
 		putReference(server.jah.db, { lang: "es", key: "settings.save", engine: "backtranslate", value: "Save" });
 		const res = await api("POST", "/api/backtranslate", { lang: "es", key: "settings.save" });
 		assert.equal(res.status, 200);
@@ -340,7 +340,7 @@ test("a cached back-translation is served without touching an engine", async () 
 
 test("EDITING A KEY DROPS ITS CACHED SECOND OPINION — stale advice must not linger", async () => {
 	await withServer(async ({ api, server }) => {
-		const { putReference } = await import("../src/store.js");
+		const { putReference } = await import("../server/store.js");
 		putReference(server.jah.db, { lang: "es", key: "settings.save", engine: "backtranslate", value: "old reading" });
 		await api("POST", "/api/save", { lang: "es", key: "settings.save", value: "Guardar todo" });
 		const res = await api("GET", "/api/reference?lang=es&key=settings.save");

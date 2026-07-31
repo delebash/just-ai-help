@@ -7,7 +7,7 @@ for why it is built this way.
 > `justwrite-app/docs/plans/2026-07-26-i18n-single-source-research.md`, and the sections from
 > "The clean re-measurement — 2026-07-28" onward (line ~785) supersede everything measured
 > before them. **This file was itself wrong for a day** because a session updated that document
-> and not this one, and the next session then "corrected" `src/models.json` from the stale
+> and not this one, and the next session then "corrected" `server/models.json` from the stale
 > summary here — promoting a demoted model and calling the best model untested. If those two
 > documents ever disagree, the research record wins and this file is the thing to fix.
 
@@ -18,8 +18,8 @@ or online model, then re-read the files and assert what was written. **Author** 
 front-matter `lede:`/`hints:` become locale keys, so one sentence serves the article, the lede
 and the field hint and translates like any other key. Zero dependencies, Node 20+, 65 tests.
 
-Layers: `src/loop.js` (translate, ours since 2026-07-27) · `src/checks.js` + `src/suspects.js`
-(verify — the differentiator) · `src/review.js` (triage page) · `src/extract.js` (author).
+Layers: `server/loop.js` (translate, ours since 2026-07-27) · `server/checks.js` + `server/suspects.js`
+(verify — the differentiator) · `server/review.js` (triage page) · `server/extract.js` (author).
 
 ## MEASURED RESULTS — the current, clean set (2026-07-28)
 
@@ -39,7 +39,7 @@ flagged strings, not raw flag counts.
 | Gemini 3.6 Flash (cloud, not re-measured) | 0 | 0 | 94 s — but 20 requests/DAY |
 
 **The flagship MoE is the most accurate thing measured AND the fastest, and it is now the
-shipped default** (`src/engines.json` row `ollama`, changed 2026-07-29). Its real tag is
+shipped default** (`server/engines.json` row `ollama`, changed 2026-07-29). Its real tag is
 `hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL` — instruction-tuned, QAT, unsloth's
 UD-Q4_K_XL quant, and the exact artefact every number above was taken from. It needs
 `"think": false` — a thinking model returns empty content otherwise — so that row carries the
@@ -48,7 +48,7 @@ nothing to switch off. `think` has no global default; it belongs to the row, mat
 
 What gates the MoE is **memory, not the card**: ~15 GB across VRAM and system RAM, measured on
 8 GB VRAM + 32 GB system RAM. More VRAM only helps. 16 GB of system RAM with no large card is
-untested — that is the case `ollama-gemma3` exists for. Note `src/models.json` tiers are keyed
+untested — that is the case `ollama-gemma3` exists for. Note `server/models.json` tiers are keyed
 by VRAM, which is not this model's binding constraint.
 
 **Hy-MT2-7B is the speed option and it costs correctness** — a reproducible Spanish `¿` miss on
@@ -266,7 +266,7 @@ not broken. Adding `Tauri`, `Vue`, `Pinia`, the model ids and `tokens` to `doNot
 the check from **11 findings to 7** on the 867-key run, and shields those terms during
 translation too. Measured, not projected.
 
-**Fix 2 — `src/accepted.js`, a reviewer verdict that expires.** The remaining seven were Spanish
+**Fix 2 — `server/accepted.js`, a reviewer verdict that expires.** The remaining seven were Spanish
 cognates (`No`, `General`, `App`, `Error`, `ID`, `auto`, `total`). They are now cleared by
 `--accept <key[,key…]>` or the review page's **correct as-is** button, into a committed
 `<lang>.accepted.json`. An entry is hashed over **(key, code, source, target)**, which is the
@@ -344,14 +344,14 @@ read the `TEMPERATURE` constant, but a profile can pin `temperature: 0` via `ext
 would have produced exactly the meaningless all-clear the guard exists to refuse; it now reads
 `effectiveTemperature(profile)`, derived from the BUILT request body so the guard and the body
 cannot drift. `npm test` became plain `node --test` (the quoted glob needs Node 21+ while the
-repo declares Node 20+). `src/engines.json` lost its false `_legacy` note and four dead fields
+repo declares Node 20+). `server/engines.json` lost its false `_legacy` note and four dead fields
 (grep-verified unused). Then, after the user caught the model-table errors described at the top
-of this file, `src/models.json` and the README's *Measured* section were rewritten from the
+of this file, `server/models.json` and the README's *Measured* section were rewritten from the
 research record, and `docs/GUIDE.md` was added as the short user-facing guide.
 
 Then **every `.mjs` became `.js`**. `package.json` already declared `"type": "module"`, so the
-extension was carrying no information — the commands are now `node src/translate.js`, and the
-whole repo, docs included, says `.js`. One trap found in passing: **`src/checks.js` is binary to
+extension was carrying no information — the commands are now `node server/translate.js`, and the
+whole repo, docs included, says `.js`. One trap found in passing: **`server/checks.js` is binary to
 git and invisible to ripgrep**, because `multiset()` joins on a literal NUL. A grep-based sweep
 that reports "clean" has not looked at that file — verify with something that reads bytes.
 
@@ -383,7 +383,7 @@ finished features to anyone auditing from the layer below. Read the seed data, n
 
 The user asked why the flagship was not the default, and the answer this repo gave was wrong.
 
-**What was actually wrong.** `src/models.json` said the MoE was "not a public Ollama tag — supply
+**What was actually wrong.** `server/models.json` said the MoE was "not a public Ollama tag — supply
 your own GGUF", and that sentence was the stated reason a slower, equally-accurate model shipped
 as the default. `ollama list` settles it: the model is installed as
 `hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL`, a name Ollama only assigns to something
@@ -391,10 +391,10 @@ as the default. `ollama list` settles it: the model is installed as
 no manual download. With that gone, the only remaining objection was the 15 GB download, which is
 a disk cost and does not outrank a measured win on both accuracy and speed.
 
-**What changed.** `src/engines.json` row `ollama` now names the full MoE tag and carries
+**What changed.** `server/engines.json` row `ollama` now names the full MoE tag and carries
 `think: false`; a new `ollama-gemma3` row holds `gemma3:12b` with no `think` field. `think` is now
 explicitly per-row, matched to the model that row names, rather than a global that must be absent.
-`src/models.json` promotes the MoE to `8gb.recommended` with its real pull command and demotes
+`server/models.json` promotes the MoE to `8gb.recommended` with its real pull command and demotes
 gemma3:12b to the small-download alternative; the `16gb` tier inherits the same recommendation.
 README and `docs/GUIDE.md` follow, and GUIDE now leads with one pull command and a
 pick-something-else-only-if table.
@@ -435,7 +435,7 @@ same-instrument reproduction rather than a byte-identical repeat of the 73.8 s f
 
 **Also corrected here:** the claim that the 846-key Spanish output no longer existed. It does —
 see WHAT REMAINS above. Item 1 is unblocked; item 3 is not, and the reason is the missing
-`.jah-cache.json`, read out of `src/loop.js:320` rather than guessed.
+`.jah-cache.json`, read out of `server/loop.js:320` rather than guessed.
 
 ## 2026-07-30, overnight — items 1 and 3 closed, item 2 started
 
@@ -504,7 +504,7 @@ half true, now corrected.
 `topN: 30` reported thirty, so **20% of the signal was visible** and a key with a real semantic
 defect sat in the invisible 120. And the ranking did not earn the cut it makes: the two semantic
 defects ranked **#22 and #30 of the 30 shown**, the hidden 120 have a median spread of 0.17
-against 0.18 for all 150, and 21 hidden keys disagreed badly (≥ 0.5). `src/suspects.js` records
+against 0.18 for all 150, and 21 hidden keys disagreed badly (≥ 0.5). `server/suspects.js` records
 those planted defects ranking #1 and #3 on the original 40-key corpus — **that does not hold at
 1,965 keys.** `topN` is a display budget, not engine time; set it above the disagreement count.
 
@@ -516,7 +516,7 @@ behaving as documented. The other was `autoconservado` where the catalogue's oth
 strings say `autoguardado` — no check compares a term against its own catalogue. Both were found
 by reading the file, and nothing else would have found them.
 
-**Also fixed here: `src/checks.js` contained a literal NUL byte** (since the first checks commit,
+**Also fixed here: `server/checks.js` contained a literal NUL byte** (since the first checks commit,
 `8774936`), which made git classify the project's most important file as **binary** — its diffs
 rendered as "Binary files differ" and `grep`/`Grep` skipped it silently. Replaced with the
 six-character escape; no behaviour change, 75 tests still pass.

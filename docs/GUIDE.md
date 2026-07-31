@@ -61,7 +61,7 @@ reproducibly dropped the Spanish opening `¿` and once invented a word that was 
 source. It is a fine choice *if* you plan to review with `--probe` and the review page; it is
 not the choice if you want to ship the output unread.
 
-Full numbers and the reasoning: `src/models.json`.
+Full numbers and the reasoning: `server/models.json`.
 
 ### Or use an online model
 
@@ -109,7 +109,7 @@ Edit the copy:
 - **`context`** — one sentence about your app. It goes in the prompt and genuinely changes
   word choice.
 - **`glossary.doNotTranslate`** — brand names and terms that must survive untouched.
-- **`engine`** — which row of `src/engines.json` to use. `"ollama"` is local with the default
+- **`engine`** — which row of `server/engines.json` to use. `"ollama"` is local with the default
   26B MoE; `"ollama-gemma3"` is local with the smaller `gemma3:12b`; `"gemini-free"` and
   `"openai"` are online. Each row already carries the right settings for the model it names, so
   switching model by switching *engine* is the option that cannot go wrong.
@@ -122,11 +122,11 @@ Edit the copy:
 ## 4. The workflow
 
 ```bash
-node src/translate.js config.json                  # 1. translate what changed, then check
-node src/translate.js config.json --probe          # 2. (optional) second opinion on meaning
-node src/review.js    config.json                  # 3. fix what got flagged
-node src/translate.js config.json --accept <key>   # 3b. mark a flag as correct, not a defect
-node src/translate.js config.json --check-only     # 4. in CI: verify, no engine needed
+node server/translate.js config.json                  # 1. translate what changed, then check
+node server/translate.js config.json --probe          # 2. (optional) second opinion on meaning
+node server/review.js    config.json                  # 3. fix what got flagged
+node server/translate.js config.json --accept <key>   # 3b. mark a flag as correct, not a defect
+node server/translate.js config.json --check-only     # 4. in CI: verify, no engine needed
 ```
 
 **1 — Translate.** Only keys that are new or changed get sent to the model; everything else is
@@ -204,7 +204,7 @@ So an acceptance is not an exemption and not a to-do item. It is **the memory th
 same question being asked forever.**
 
 ```bash
-node src/translate.js config.json --accept common.no,settings.sections.general
+node server/translate.js config.json --accept common.no,settings.sections.general
 ```
 
 Or press **correct as-is** on the row in the review workspace. Either way it lands in
@@ -244,7 +244,7 @@ no network, no API key. It exits non-zero if anything is wrong.
 a better one:
 
 ```bash
-node src/translate.js config.json --escalate gemini-free
+node server/translate.js config.json --escalate gemini-free
 ```
 
 ### Help docs → locale keys (optional)
@@ -262,8 +262,8 @@ hints:
 ```
 
 ```bash
-node src/extract.js config.json            # writes lede.* and hints.* into en.json
-node src/extract.js config.json --check    # CI: fails if they are stale
+node server/extract.js config.json            # writes lede.* and hints.* into en.json
+node server/extract.js config.json --check    # CI: fails if they are stale
 ```
 
 Then translate as usual — by that point they are ordinary keys.

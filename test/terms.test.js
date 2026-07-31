@@ -11,7 +11,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checkKeyTerms, checkTerms, DOMINANCE, stem, termIndex, terms, termUsage } from "../src/terms.js";
+import { checkKeyTerms, checkTerms, DOMINANCE, stem, termIndex, terms, termUsage } from "../server/terms.js";
 
 /**
  * Seven keys establishing "autosave" -> "autoguardado", plus one that breaks it: 7/8 = 87.5%,

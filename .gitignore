@@ -12,6 +12,5 @@ just-ai-help.config.json
 .jah.db-wal
 .jah.db-shm
 
-# The UI toolchain is dev-only. review-ui/dist is COMMITTED on purpose — it is
-# what lets the tool run with node alone, no install and no sibling checkout.
-review-ui/node_modules/
+# ui/dist is COMMITTED on purpose — it is what lets the tool run with node
+# alone: no install, no sibling checkout. node_modules is already ignored above.
