@@ -129,22 +129,25 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
    JustWrite is USER-OWNED, so the errors are reported, not patched.
    **Still untested:** the review PAGE itself. This triage went through `--check-only` and reading
    the JSON, so whether the `:4780` UI is any good remains an open question.
-2. **The conversion sweep** — the real remaining work, and unaffected by the above. **UNDER WAY
-   2026-07-30: thirty commits in `justwrite-app`, all pushed, taking it 1,430 → 392 warnings
-   and 69 → 9 files. 72 of 81 renderer files are clean — 73% of the warnings and 89% of the
-   files.** The per-file list of what remains, and the METHOD that is working, are both in
-   `justwrite-app/docs/TASKS.md`; the load-bearing findings are here.
+2. ~~**The conversion sweep**~~ — **DONE 2026-07-30. `justwrite-app` is at ZERO raw strings and
+   `no-raw-text` is now `"error"`, the real gate.** Thirty-eight commits, all pushed, taking it
+   1,430 → 0 warnings and 69 → 0 files. All 81 renderer `.vue` files are clean. The rule always
+   said it would flip "once every view is converted"; that condition is met, and the flip was
+   verified to bite before shipping.
 
-   **A new gate lives in JustWrite now:** `src/renderer/src/i18n/i18nTSlots.test.js`. `<i18n-t>`
-   had two silent failure modes — a renamed keypath renders EMPTY (missingWarn is off) and a
-   mismatched slot renders literal `{braces}` — and no existing check could see either. Verified
-   to bite on both, then restored. It matters here because the interpolated sentences are exactly
-   the strings this tool translates and re-checks.
+   **Final state:** `en.json` holds 1,965 leaf keys across 70 namespaces; 61 `<i18n-t>` blocks;
+   `i18n:report` 0 missing / 0 unused; 471 unit tests; clean build. Full record in
+   `justwrite-app/docs/TASKS.md`.
 
-   **The dedupe is the cheapest progress**, as the measurement predicted: 66 call sites now share
-   keys, and only two keys were minted to do it. Five of the shared keys already existed and had
-   simply never been pointed at. **Six manual pluralizations** (`item{{ n === 1 ? "" : "s" }}`)
-   were removed too — English-only suffix logic that no other language follows.
+   **What this unblocks here:** the catalogue this tool translates is now complete and
+   single-sourced. A full `--probe` run against 1,965 keys is the natural next measurement, and
+   it will be the first one taken against a catalogue with no English hiding in the templates.
+
+   **A gate worth knowing about:** `justwrite-app/src/renderer/src/i18n/i18nTSlots.test.js`.
+   `<i18n-t>` has two silent failure modes — a renamed keypath renders EMPTY (missingWarn is off)
+   and a mismatched slot renders literal `{braces}`. It caught a real one late in the sweep: a
+   53-key block was silently never inserted because the guard string matched a NESTED key, so
+   every template edit applied against keys that did not exist. Nothing else saw it.
 
    **The size of the job is ~850 keys, not 1,430.** Of 1,430 warnings, 1,329 parse as single-line
    raw-text nodes, and **1,154 are real copy collapsing to 852 distinct strings** — so ~300 sites
