@@ -8,7 +8,6 @@ import { computed, onMounted, ref } from "vue";
 import UiButton from "@delebash/llm-ui/common/components/UiButton.vue";
 import UiSelect from "@delebash/llm-ui/common/components/UiSelect.vue";
 import { pushToast } from "@delebash/llm-ui/common/services/toastBridge.js";
-import EngineSettings from "@/components/EngineSettings.vue";
 import { api } from "@/services/api.js";
 import { useReview } from "@/stores/review.js";
 
@@ -17,7 +16,6 @@ const providers = ref([]);
 const connections = ref([]);
 const connectionId = ref(null);
 const scope = ref("flagged");
-const showSettings = ref(false);
 
 const SCOPES = [
 	{ value: "flagged", label: "all flagged" },
@@ -92,14 +90,5 @@ async function run() {
     </template>
 
     <UiButton size="small" intent="ghost" title="Undo last action (u)" @click="s.undo()">Undo</UiButton>
-    <UiButton size="small" intent="ghost" title="Engine connections" @click="showSettings = !showSettings">Engines</UiButton>
-
-    <EngineSettings
-      v-if="showSettings"
-      :providers="providers"
-      :connections="connections"
-      @saved="loadEngines"
-      @close="showSettings = false"
-    />
   </header>
 </template>

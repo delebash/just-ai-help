@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { findProjectRoot, glossaryCandidates, localeCodesIn, planInit, writeInit } from "../server/init.js";
+import { defaultEngine, findProjectRoot, glossaryCandidates, localeCodesIn, planInit, writeInit } from "../server/init.js";
 import { projectPaths } from "../server/paths.js";
 
 /** A host app: package.json at the root, strings several directories down. */
@@ -160,4 +160,32 @@ test("nothing is written to disk until writeInit is called", () => {
 	const { root, locales } = app();
 	planInit(join(locales, "en.json"));
 	assert.ok(!existsSync(join(root, "just-ai-help")), "planning must be a pure read");
+});
+
+// ── the engine field ────────────────────────────────────────────────────────────────────
+// Added 2026-07-31 after a fresh init produced a config whose very next command died with
+// `unknown engine "undefined"`. Setup that reports success and leaves you unable to run is
+// worse than setup that fails.
+
+test("BITES: an init'd config names an engine, so the next command actually runs", () => {
+	const { locales } = app();
+
+	const plan = planInit(join(locales, "en.json"));
+	assert.ok(plan.cfg.engine, "config has no engine — `unknown engine \"undefined\"` on the next run");
+	const engines = JSON.parse(readFileSync(new URL("../server/config/engines.json", import.meta.url), "utf8"));
+	assert.ok(engines[plan.cfg.engine], `engine "${plan.cfg.engine}" is not a row in engines.json`);
+});
+
+test("--engine overrides the default", () => {
+	const { locales } = app();
+	assert.equal(planInit(join(locales, "en.json"), { engine: "openai" }).cfg.engine, "openai");
+});
+
+test("defaultEngine reads the marker from engines.json, and BITES if the data is ambiguous", () => {
+	// The value is DATA, not a constant in code: swapping the recommended default is a row edit.
+	const engines = JSON.parse(readFileSync(new URL("../server/config/engines.json", import.meta.url), "utf8"));
+	assert.equal(defaultEngine(engines), "ollama");
+	// Two defaults, or none, must fail loudly rather than silently pick one.
+	assert.throws(() => defaultEngine({ a: { default: true }, b: { default: true } }), /exactly one row/);
+	assert.throws(() => defaultEngine({ a: { kind: "ollama" } }), /exactly one row/);
 });

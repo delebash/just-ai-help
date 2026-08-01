@@ -20,14 +20,14 @@
 
 import { EventEmitter } from "node:events";
 import { translateLanguage } from "./loop.js";
-import { finishRun, putProposal, startRun } from "./store.js";
+import { finishRun, putProposal, startRun } from "./state.js";
 
 /** A job that has ended, one way or another. */
 const TERMINAL = new Set(["done", "cancelled", "failed"]);
 
 export class JobManager {
-	constructor({ db, log = () => {} } = {}) {
-		this.db = db;
+	constructor({ store, log = () => {} } = {}) {
+		this.store = store;
 		this.log = log;
 		this.current = null;
 		this.events = new EventEmitter();
@@ -73,7 +73,7 @@ export class JobManager {
 
 		const controller = new AbortController();
 		const total = Object.keys(subset).length;
-		const runId = this.db ? startRun(this.db, { lang, engine, scope }) : null;
+		const runId = this.store ? startRun(this.store, { lang, engine, scope }) : null;
 
 		const job = {
 			id: `job-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
@@ -120,7 +120,7 @@ export class JobManager {
 					for (const [key, value] of Object.entries(partial)) {
 						if (seen.has(key)) continue;
 						seen.add(key);
-						if (this.db) putProposal(this.db, { lang: job.lang, key, engine: job.engine, value });
+						if (this.store) putProposal(this.store, { lang: job.lang, key, engine: job.engine, value });
 						this.#emit("item", { key, value, lang: job.lang, engine: job.engine });
 					}
 					job.done = seen.size;
@@ -133,7 +133,7 @@ export class JobManager {
 			for (const [key, value] of Object.entries(values)) {
 				if (seen.has(key)) continue;
 				seen.add(key);
-				if (this.db) putProposal(this.db, { lang: job.lang, key, engine: job.engine, value });
+				if (this.store) putProposal(this.store, { lang: job.lang, key, engine: job.engine, value });
 				this.#emit("item", { key, value, lang: job.lang, engine: job.engine });
 			}
 
@@ -146,8 +146,8 @@ export class JobManager {
 			job.error = err.message;
 			this.#emit("error", { message: err.message });
 		} finally {
-			if (this.db && job.runId) {
-				finishRun(this.db, job.runId, {
+			if (this.store && job.runId) {
+				finishRun(this.store, job.runId, {
 					keys: job.done,
 					requests: job.requests,
 					elapsedMs: Date.now() - job.startedMs,

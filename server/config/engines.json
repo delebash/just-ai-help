@@ -1,24 +1,4 @@
 {
-  "_why": "Per-provider facts a generic translator cannot know. Each of these caused a real failure on 2026-07-27: a stale model id 404'd 19/40 keys, a thinking model with no token headroom returned empty content, and OpenAI's 120ms default rate-limit was applied to a provider with a ~15 RPM tier. Add a provider by adding a row.",
-
-  "_seed_note": "THIS FILE IS THE SEED, NOT YOUR CONFIG. Since 2026-07-31 these rows are loaded into the `providers` table of .jah.db on every start, replacing it wholesale — so a moved endpoint or a stale model id is fixed for everyone by updating the tool. YOUR settings (which provider you picked, your key, any field you overrode) live in the `connections` table and are never touched by that reseed. Edit this file to add a provider to the menu; edit a connection in the review workspace to change what you personally run.",
-
-  "_schema": {
-    "_note": "PROFILE SCHEMA v2 — the shape the owned translate loop reads. Every field below is DATA, which is the whole point: every failure of 2026-07-27 (--think, chat_template_kwargs, a stale model id, the wrong rate limit) had one disease, that the request body belonged to somebody else and we could not reach it. `extraBody` is the general cure — it merges into the request verbatim, so `think:false`, `chat_template_kwargs.enable_thinking` and `reasoning_effort` become config rather than code.",
-    "kind": "\"openai-compat\" (POST {url}/chat/completions) or \"ollama\" (POST {url}/api/chat). Two transports, both proven accepted 2026-07-27.",
-    "url": "base URL of the server. No trailing slash.",
-    "model": "model id. A value starting \"REQUIRED\" means the config must supply it — a local server's model id is whatever YOU serve.",
-    "apiKeyEnv": "optional. Name of the env var holding the key. Absent = no key needed. The key is never written to a file.",
-    "headers": "optional. Extra request headers, merged verbatim.",
-    "extraBody": "optional. Merged into the JSON request body verbatim, last. The general pass-through. ONE exception: for kind \"ollama\", `extraBody.options` is merged one level deep into the built `options` rather than replacing it — otherwise setting num_ctx would silently drop temperature and the output cap. Temperature can be overridden here too; the --probe guard reads the EFFECTIVE temperature of the built request (loop.js effectiveTemperature), so an override to 0 is refused rather than silently measuring nothing.",
-    "think": "optional. Ollama's top-level `think` field: false | true | \"low\" | \"medium\" | \"high\". Omitted when undefined, which leaves the model's own default alone. There is no GLOBAL default — the value belongs to the row, matched to the model that row names, because whether thinking helps is a property of the model and not of the transport. A row naming a thinking model carries `think: false` or it returns empty content; a row naming a non-thinking model omits the field.",
-    "batchSize": "how many keys go in one request.",
-    "rateLimitMs": "optional. Minimum gap between requests. Omit or 0 for a local server.",
-    "timeoutMs": "per-request timeout. Derived from measurement — each row says from what.",
-    "maxOutputTokens": "output-token cap for one request. Was `batchMaxTokens`; renamed because it is now ours and it caps output, not a batch."
-  },
-
-
   "gemini-free": {
     "kind": "openai-compat",
     "url": "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -27,43 +7,26 @@
     "batchSize": 24,
     "rateLimitMs": 1000,
     "timeoutMs": 120000,
-    "maxOutputTokens": 16000,
-    "_note": "SMOKE-TEST ONLY: the free tier is 20 requests per day per model (measured 2026-07-27, quotaId GenerateRequestsPerDayPerProjectPerModel-FreeTier). It cannot translate a real catalogue — 846 keys at batch 24 is 36 requests, so ONE language exceeds a whole day's quota. Use it to prove a config works end to end, then switch engines. Quality when it does run is the best measured here: 40/40 keys, 40/40 placeholders, 8/8 pipes, 0 identical-half bugs, 94 s.",
-    "_timeout_why": "94 s for the entire 40-key corpus, so 120 s per request is roughly 4x the worst single batch.",
-    "_compat_caveat": "The v1beta/openai endpoint returned bodyless 400s to i18n-ai-translate's zod-generated response_format. Owning the request body is exactly what makes that reachable — but it is UNVERIFIED against our own loop."
+    "maxOutputTokens": 16000
   },
-
   "ollama": {
+    "default": true,
     "kind": "ollama",
     "url": "http://127.0.0.1:11434",
     "model": "hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL",
     "think": false,
     "batchSize": 16,
     "timeoutMs": 300000,
-    "maxOutputTokens": 8192,
-    "_note": "THE recommended local option: one install, `ollama pull <model>`, done. No API key. Uses Ollama's NATIVE /api/chat, not its OpenAI-compatible /v1 — compat layers are consistently less complete than native APIs. maxOutputTokens is raised from Ollama's own default of 2048, which starves a thinking model: deliberation eats the budget and the answer is never written.",
-    "_model_why": "The 26B-A4B QAT MoE is the default because it was the most accurate AND the fastest thing measured: 0 structural failures and ZERO real errors in three placements — GPU offload 73.8 s (retest 74.2), genuinely CPU-only 128.8 s, Ollama num_gpu:0 132.0 s (retest 131.9) — against 166.7 s for gemma3:12b, which it therefore beats on CPU alone while leaving the card free. Only ~4B of its 26B parameters are active per token, which is what buys that. Clean re-measurement 2026-07-28, every other model unloaded from VRAM, runs sequential. It is a ~15 GB download; that is a disk cost, not a quality argument, so it does not outrank a measured accuracy win. For a smaller download use the `ollama-gemma3` row. Per-tier detail: docs/models.json.",
-    "_model_id_why": "The model id is the FULL tag, not the shorthand `gemma-4-26b-a4b-qat` that this file and the docs used until 2026-07-29 — a shorthand is not pullable, and writing one here is how a reader ends up believing they must go and find weights by hand. `hf.co/<owner>/<repo>:<quant>` is a first-class Ollama tag: `ollama pull` fetches it from HuggingFace directly, exactly as it does the Hy-MT2 row, and no manual download or Modelfile is involved. Verified 2026-07-29 end to end against this tag: `think:false` returned \"Guardar {count} capítulos\" for \"Save {count} chapters\" — translated, placeholder intact.",
-    "_ram_caveat": "What gates this model is MEMORY, not the graphics card: 15 GB has to live in VRAM, system RAM, or across both. Measured only on 8 GB VRAM + 32 GB system RAM. More VRAM can only help it. A machine with 16 GB of system RAM and no large card is the untested case and is expected to be tight — nobody has run it, so this is a caveat rather than a number. Switch to `ollama-gemma3` (8.1 GB) if it swaps.",
-    "_think_why": "`think: false` belongs to THIS row because this row names a thinking model: without it the model returns empty content on every retry, deliberation having consumed the whole 8,192-token budget before any answer was written (measured 2026-07-28 — it is the first thing that happened when the MoE was tried). There is no global default, and the value is per-row for a reason. If you override `model` here, set `think` to suit the model you named: sending `think: false` to a non-thinking model is harmless (verified 2026-07-29 — gemma3:12b answers normally), but sending it to a DIFFERENT thinking model selects a measurably worse mode. Measured 2026-07-27 on qwen3:8b: thinking off is 13x faster (27 s -> 2 s) and it TRANSLATED THE PLACEHOLDER, returning \"{nota} nota | {nota} notas\" where the thinking run returned \"{n} nota | {n} notas\".",
-    "_timeout_why": "the 40-key corpus at batch 16 is 3 requests; the slowest model that finished it took 366 s overall, so ~120 s for a worst batch. 300 s per request keeps headroom for that plus a cold model load, on hardware slower than the 8 GB card these were measured on.",
-    "_setup": "ollama serve   then:   ollama pull hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL"
+    "maxOutputTokens": 8192
   },
-
   "ollama-gemma3": {
     "kind": "ollama",
     "url": "http://127.0.0.1:11434",
     "model": "gemma3:12b",
     "batchSize": 16,
     "timeoutMs": 300000,
-    "maxOutputTokens": 8192,
-    "_note": "The same Ollama transport with the SMALL model: 8.1 GB instead of ~15 GB. Use this when disk or memory rules out the default, not when you want the better translation.",
-    "_model_why": "gemma3:12b also finishes the 40-key corpus with ZERO real errors (0 structural, 1 semantic flag) and takes 166.7 s to the MoE's 73.8 s — clean re-measurement 2026-07-28. Equal accuracy, 2.3x the time, half the download. It was the default until 2026-07-29, on the reasoning that a ~15 GB download should not be imposed by default; that was dropped once the MoE's pull command turned out to be a single command like any other and the download the only argument left.",
-    "_think_why": "no `think` field, and that is correct for this row: gemma3:12b is not a thinking model, so there is nothing to switch off and the model's own default is the right one.",
-    "_timeout_why": "same reasoning as the `ollama` row — identical transport, batch and output cap.",
-    "_setup": "ollama serve   then:   ollama pull gemma3:12b"
+    "maxOutputTokens": 8192
   },
-
   "mistral": {
     "kind": "openai-compat",
     "url": "https://api.mistral.ai/v1",
@@ -72,13 +35,8 @@
     "batchSize": 24,
     "rateLimitMs": 1000,
     "timeoutMs": 120000,
-    "maxOutputTokens": 16000,
-    "_note": "Larger free allowance than Groq on the Experiment tier (~1B tokens/month, reported not measured) — but it REQUIRES opting into training on your data, which is a real cost wearing a free label. Read that before choosing it over Groq.",
-    "_measured": "NOTHING. Never run.",
-    "_verified_2026_07_31": "The endpoint returns 401 rather than 404, so the URL is right. The MODEL ID IS DELIBERATELY 'REQUIRED': Mistral's catalogue is dated (mistral-small-4-0-26-03 and similar) and rotates, and writing a dated id here that expires is exactly the failure this file's first line records. Look it up when you configure it.",
-    "_setup": "console.mistral.ai for a key, then set `model` on the connection."
+    "maxOutputTokens": 16000
   },
-
   "openrouter": {
     "kind": "openai-compat",
     "url": "https://openrouter.ai/api/v1",
@@ -87,13 +45,8 @@
     "batchSize": 24,
     "rateLimitMs": 1000,
     "timeoutMs": 120000,
-    "maxOutputTokens": 16000,
-    "_note": "One key, many providers' models — useful for trying a different model family against the same catalogue without a new account each time. Published free tier is ~1,000 requests/day across models carrying the `:free` suffix.",
-    "_measured": "NOTHING. Never run.",
-    "_verified_2026_07_31": "Endpoint returns 401 rather than 404. The model id is REQUIRED because OpenRouter's slugs are a live catalogue, not a fixed list — pick one from openrouter.ai/models.",
-    "_setup": "openrouter.ai for a key, then set `model` on the connection."
+    "maxOutputTokens": 16000
   },
-
   "local-openai-compatible": {
     "kind": "openai-compat",
     "url": "http://127.0.0.1:8080/v1",
@@ -101,11 +54,8 @@
     "apiKeyEnv": "OPENAI_API_KEY",
     "batchSize": 8,
     "timeoutMs": 300000,
-    "maxOutputTokens": 16000,
-    "_note": "Any OpenAI-compatible server — llama.cpp's llama-server, LM Studio, vLLM. Override `url` in your config to match yours. A raw llama-server must be started with --reasoning off (or --reasoning-budget 0), or given the equivalent via extraBody: a thinking model returns EMPTY content otherwise, because deliberation fills message.reasoning_content and the token budget runs out before any answer is written.",
-    "_timeout_why": "same reasoning as the ollama row — local generation, smaller batch."
+    "maxOutputTokens": 16000
   },
-
   "groq": {
     "kind": "openai-compat",
     "url": "https://api.groq.com/openai/v1",
@@ -114,15 +64,8 @@
     "batchSize": 24,
     "rateLimitMs": 2100,
     "timeoutMs": 120000,
-    "maxOutputTokens": 16000,
-    "_note": "THE FREE ONLINE OPTION. A Groq key costs nothing and needs no credit card — sign up at console.groq.com with email, GitHub or Google. Published free tier: 30 requests/minute, and ~14,400 requests/day on llama-3.1-8b-instant. The 2,039-key JustWrite catalogue is ~128 requests at batch 24, so a whole catalogue is well inside one day's allowance.",
-    "_measured": "NOTHING. This row has never been run. Every timing and quality claim elsewhere in this file came from a measurement; this one has none, so it is not a recommendation — it is a starting point. Run the 40-key corpus before believing anything about it.",
-    "_verified_2026_07_31": "The endpoint and model ids were checked, not remembered: POST https://api.groq.com/openai/v1/chat/completions returns 401 (exists, wants a key) rather than 404, and `llama-3.3-70b-versatile` / `llama-3.1-8b-instant` are listed as production models in Groq's own docs with 131k context. A stale model id is the failure that 404'd 19 of 40 keys on 2026-07-27, so these were not written from memory.",
-    "_model_why": "llama-3.3-70b-versatile for quality; switch to `llama-3.1-8b-instant` for the much larger daily allowance if you are translating a big catalogue rather than escalating a handful of keys.",
-    "_rate_why": "30 requests/minute published = one per 2s. 2100ms leaves a margin, because a 429 mid-run costs a retry and the whole point of a rate limit field is that the wrong one burns the run — measured on a different provider on 2026-07-27.",
-    "_setup": "Get a free key at console.groq.com, then add a connection in the review workspace (or set GROQ_API_KEY)."
+    "maxOutputTokens": 16000
   },
-
   "openai": {
     "kind": "openai-compat",
     "url": "https://api.openai.com/v1",
@@ -131,7 +74,6 @@
     "batchSize": 32,
     "rateLimitMs": 120,
     "timeoutMs": 120000,
-    "maxOutputTokens": 16000,
-    "_note": "UNTESTED here — no key. rateLimitMs is OpenAI's published tier-1 figure, not a measurement of ours."
+    "maxOutputTokens": 16000
   }
 }

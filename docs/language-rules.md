@@ -74,3 +74,11 @@ So French and CJK need a **new rule type and a new check**, not just a new row. 
 `promptLine` for them is possible today; adding verification is not. Do not add a language's
 `pairedPunct` by analogy — if the rule is not literally "this opener must precede that closer",
 the schema needs extending first.
+
+---
+
+## The pointer that used to live in the JSON
+
+Data only. Why this file exists, the 56-spurious-¿ incident that shaped the Spanish rule, and what you need before adding a language: docs/language-rules.md
+
+(That sentence was a `_doc` key inside `conventions.json` until 2026-07-31. The file is data only now.)

@@ -56,7 +56,7 @@ async function withServer(run, { uiDir } = {}) {
 	try {
 		await run({ base, api, locales });
 	} finally {
-		server.jah.db.close();
+		server.jah.store.close();
 		await new Promise((r) => server.close(r));
 	}
 }

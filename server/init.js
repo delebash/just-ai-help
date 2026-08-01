@@ -1,9 +1,10 @@
-#!/usr/bin/env node
-// Set a project up by POINTING AT ITS en.json.
+// Deriving a project's config from ITS en.json.
 //
-//   node server/init.js path/to/your-app/src/i18n/locales/en.json
+// THE CODE BEHIND THE SETUP TAB — `server/server.js` calls `planInit` for the path box's live
+// validation and `writeInit` when you save. One derivation, so a config cannot depend on which
+// door you came through.
 //
-// WHY THIS REPLACES A TEMPLATE FILE. Setting a project up used to mean: find
+// WHY THIS REPLACED A TEMPLATE FILE. Setting a project up used to mean: find
 // `docs/config.example.json` inside the TOOL's repo, copy it into a different repo, rename it,
 // and hand-edit four values including a relative path. That is the `.env.example` pattern
 // applied where it does not fit — `.env.example` works because it sits in the same repo as the
@@ -31,6 +32,24 @@ import { flatten } from "./jsonutil.js";
 
 export const CONFIG_DIR = "just-ai-help";
 export const CONFIG_NAME = "config.json";
+/**
+ * The engine row `init` writes into a new config, READ from engines.json rather than typed here.
+ *
+ * One definition, in the file that already owns engine data — so swapping the recommended
+ * default is a data edit, exactly like adding a provider. Throws rather than guessing if no row
+ * claims it: a silently-wrong default would surface as a failed run in someone else's project.
+ */
+export function defaultEngine(engines = loadEngines()) {
+	const rows = Object.entries(engines).filter(([k, v]) => !k.startsWith("_") && v?.default);
+	if (rows.length !== 1) {
+		throw new Error(`engines.json must have exactly one row marked "default": true — found ${rows.length}`);
+	}
+	return rows[0][0];
+}
+
+function loadEngines() {
+	return JSON.parse(readFileSync(new URL("./config/engines.json", import.meta.url), "utf8"));
+}
 
 /**
  * The project root: the nearest ancestor holding a package.json.
@@ -102,7 +121,7 @@ export function glossaryCandidates(values, { minCount = 3, limit = 12 } = {}) {
  * Separated from the CLI so it is testable without a terminal — the prompting half is the part
  * that cannot be tested, so it holds no logic.
  */
-export function planInit(sourcePath, { out, targets, context, glossary } = {}) {
+export function planInit(sourcePath, { out, targets, context, glossary, engine } = {}) {
 	const sourceFile = resolve(sourcePath);
 	if (!existsSync(sourceFile)) throw new Error(`no such file: ${sourceFile}`);
 
@@ -127,11 +146,17 @@ export function planInit(sourcePath, { out, targets, context, glossary } = {}) {
 	// second field can disagree with it. Forward slashes read the same on every platform.
 	const sourceRel = relative(configDir, sourceFile).split(sep).join("/");
 
+	// `engine` names a row in server/config/engines.json. Written with the shipped default
+	// rather than left out: a config without it resolves to `undefined` and the very next
+	// command dies with "unknown engine" — which is what a new project hit, one step after
+	// being told setup was done. A default you can see and change beats a field you discover
+	// by failing.
 	const cfg = {
 		source: sourceRel,
 		targets: targets ?? existing,
 		context: context ?? "",
 		glossary: glossary ?? [],
+		engine: engine ?? defaultEngine(),
 	};
 
 	return {
@@ -142,6 +167,9 @@ export function planInit(sourcePath, { out, targets, context, glossary } = {}) {
 		localesDir,
 		sourceLanguage,
 		keyCount: Object.keys(flat).length,
+		// The flattened source, so a caller can measure how complete an existing locale file is
+		// without re-reading and re-flattening the same catalogue.
+		sourceFlat: flat,
 		existingTargets: existing,
 		placeholder: inferPlaceholder(values),
 		pluralSeparator: inferPluralSeparator(values),
@@ -161,86 +189,13 @@ export function writeInit(plan, { force = false } = {}) {
 
 /** The lines a host app should add to .gitignore. Reported, never written — it is their file. */
 export function gitignoreLines() {
-	return [`${CONFIG_DIR}/*.probe.json`, `${CONFIG_DIR}/.jah-cache.json`, `${CONFIG_DIR}/.jah-probe-cache.json`, `${CONFIG_DIR}/.jah.db`];
-}
-
-// ── CLI ──────────────────────────────────────────────────────────────────────────────────
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-	const argv = process.argv.slice(2);
-	const flag = (name) => {
-		const i = argv.indexOf(name);
-		return i === -1 ? undefined : argv[i + 1];
-	};
-	const taken = new Set();
-	argv.forEach((a, i) => {
-		if (a.startsWith("--")) {
-			taken.add(i);
-			if (a !== "--force") taken.add(i + 1);
-		}
-	});
-	const sourcePath = argv.find((a, i) => !taken.has(i));
-
-	if (!sourcePath) {
-		console.error("Point this at your en.json:\n");
-		console.error("  node server/init.js path/to/your-app/src/i18n/locales/en.json\n");
-		console.error("Options:");
-		console.error("  --targets es,fr     languages to produce (default: the locale files already there)");
-		console.error('  --context "…"       one sentence about your app');
-		console.error("  --glossary A,B      terms that must never be translated anywhere");
-		console.error("  --out <dir>         where to put the just-ai-help/ folder (default: nearest package.json)");
-		console.error("  --force             overwrite an existing config");
-		process.exit(1);
-	}
-
-	const list = (s) => (s ? s.split(",").map((x) => x.trim()).filter(Boolean) : undefined);
-
-	let plan;
-	try {
-		plan = planInit(sourcePath, {
-			out: flag("--out"),
-			targets: list(flag("--targets")),
-			context: flag("--context"),
-			glossary: list(flag("--glossary")),
-		});
-	} catch (e) {
-		console.error(e.message);
-		process.exit(1);
-	}
-
-	console.log(`Read ${plan.keyCount} keys from ${plan.sourceLanguage}.json`);
-	console.log(`  placeholder       ${plan.placeholder.prefix}…${plan.placeholder.suffix}`);
-	console.log(`  plural separator  ${plan.pluralSeparator === null ? "none" : JSON.stringify(plan.pluralSeparator)}`);
-	if (plan.existingTargets.length) console.log(`  locales present   ${plan.existingTargets.join(", ")}`);
-
-	try {
-		writeInit(plan, { force: argv.includes("--force") });
-	} catch (e) {
-		console.error(`\n${e.message}`);
-		process.exit(1);
-	}
-	console.log(`\nWrote ${plan.configPath}`);
-
-	// What is still missing is stated plainly rather than left as a silent empty field. A run
-	// with no targets does nothing, and a run with no context translates short labels blind.
-	const missing = [];
-	if (!plan.cfg.targets.length) missing.push('targets  — no other locale files were there. Add e.g. ["es"]');
-	if (!plan.cfg.context) missing.push('context  — one sentence about your app. "Beat" is a story beat or a musical one; this is what decides');
-	if (missing.length) {
-		console.log("\nStill needs you:");
-		for (const m of missing) console.log(`  ${m}`);
-	}
-
-	if (plan.candidates.length) {
-		console.log(`\nPossible glossary terms, for you to accept or ignore:\n  ${plan.candidates.join(", ")}`);
-		console.log("  Only add a word that must never be translated ANYWHERE — a term here also becomes a");
-		console.log("  blanket instruction to the model, and on a real catalogue adding `AI` turned 48 correct");
-		console.log("  translations into findings.");
-	}
-
-	console.log(`\nAdd to .gitignore:\n${gitignoreLines().map((l) => `  ${l}`).join("\n")}`);
-	// `--check-only` on purpose: it calls no engine, so it is the one command that is safe to
-	// suggest before the config has been finished, and it proves the wiring.
-	console.log(`\nThen, once targets and context are filled in:`);
-	console.log(`  node <just-ai-help>/server/translate.js ${plan.configPath} --check-only`);
+	// Everything the tool writes that is NOT a decision you made. Committed alongside them are
+	// config.json, <lang>.accepted.json and <lang>.notes.json — those are your work and they
+	// travel with the repo.
+	return [
+		`${CONFIG_DIR}/*.probe.json`,
+		`${CONFIG_DIR}/.jah-cache.json`,
+		`${CONFIG_DIR}/.jah-probe-cache.json`,
+		`${CONFIG_DIR}/.jah-state.json`,
+	];
 }

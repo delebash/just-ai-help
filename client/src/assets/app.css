@@ -107,3 +107,29 @@ textarea.tgt:focus { outline: none; border-color: var(--accent); box-shadow: 0 0
 
 .empty { padding: 40px 20px; text-align: center; color: var(--muted); }
 .kbd { font: 11px/1 var(--font-mono); padding: 2px 5px; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--surface-2); }
+
+/* ── The bulk-approve bar, and the engine's verdict badge ────────────────────────────────
+   Shown only in the "came back identical" bucket, whose question is not "is this good
+   Spanish?" but "should this be Spanish at all?" — the same decision seventy times over on a
+   fresh catalogue, which is exactly what a bulk control is for. */
+.listwrap { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.bulkbar {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .4rem .6rem; border-bottom: 1px solid var(--border); flex: 0 0 auto;
+  font: 12px/1.4 var(--font-ui);
+}
+.bulkbar .spacer { flex: 1 1 auto; }
+
+/* An ANNOTATION, never a decision — the wording stays a question on purpose. */
+.verdict { font: 10px/1.4 var(--font-ui); padding: 0 .3rem; border-radius: 3px; flex: 0 0 auto; }
+.verdict.same { color: var(--success-ink); }
+.verdict.translate { color: var(--warn-ink); }
+
+/* ── Tabs ─────────────────────────────────────────────────────────────────────────────── */
+.tabs { display: flex; align-items: center; gap: .75rem; padding: .4rem .75rem; border-bottom: 1px solid var(--border); }
+.tabbed { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.tabbed > .body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+
+/* The review side of the tab body. Its own flex column so the three panes still fill the area
+   when the setup form is hidden beside it (v-show keeps both in the DOM). */
+.reviewpane { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }

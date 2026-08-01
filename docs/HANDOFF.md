@@ -1,4 +1,4 @@
-# HANDOFF — current state, 2026-07-29
+# HANDOFF — current state, 2026-07-31
 
 Read this, then [`docs/GUIDE.md`](GUIDE.md) if you just want to run the thing, then `README.md`
 for why it is built this way.
@@ -16,7 +16,7 @@ for why it is built this way.
 Two functions sharing one pipe. **Translate** a standard i18n JSON locale folder with a local
 or online model, then re-read the files and assert what was written. **Author** help docs whose
 front-matter `lede:`/`hints:` become locale keys, so one sentence serves the article, the lede
-and the field hint and translates like any other key. Zero dependencies, Node 20+, 65 tests.
+and the field hint and translates like any other key. Node 24+, no server dependencies, 244 tests.
 
 Layers: `server/loop.js` (translate, ours since 2026-07-27) · `server/checks.js` + `server/suspects.js`
 (verify — the differentiator) · `server/review.js` (triage page) · `server/extract.js` (author).
@@ -258,7 +258,7 @@ plural / glossary / missing failures. After the conventions fix + `--escalate`: 
 precision: `spurious-interrogative` 11 findings / 11 real, `startpunc` 1/1, `endpunc` 5/0 (all
 duplicates), `brackets` 1/0, and **`untranslated` 20 findings / 1 real**. The consequence is
 worse than noise: `"No"` is correct Spanish for `"No"`, so a PERFECT catalogue could never exit
-0 — and `--check-only` is THE CI gate. A gate that cannot go green is one people stop reading.
+0 — and `--check-only` is the check you run before shipping. One that cannot go green is one people stop reading.
 
 **Fix 1 — glossary hygiene, zero code.** `checkUntranslated` already exempts strings that are
 only placeholders, glossary terms, digits and punctuation; that mechanism was starved of data,
@@ -630,9 +630,198 @@ reading it.**
 Two things settled in that discussion:
 - **Load once, not swap.** Nobody asked to switch projects at runtime, so there is no teardown
   path and no "job running against the old project" hazard. That requirement was invented.
-- **`--check-only` stays a pure CLI command with no server.** It is the CI gate.
+- **`--check-only` stays a pure CLI command with no server.** It is the check you run before shipping.
 
 One design point raised and unresolved: a browser file picker yields a `File`, not a path, so
 "browse for the file" means exposing a directory-listing API over localhost. `npm start
 <path>` pre-filling the page, plus a paste-a-path box with live validation, gets the same
 benefit without that surface — but the user asked for browsing, and this was never decided.
+
+---
+
+## 2026-07-31, late — ONE storage mechanism, and the engine stops signing things off
+
+Two things landed together, and the second one is a correction to work done earlier the same day.
+
+### SQLite is gone. Everything is JSON.
+
+`server/db.js` (397 lines) and `server/store.js` (229) are deleted, replaced by
+`server/state.js` (348) and `server/settings.js` (185).
+
+**The argument that decided it**, after several turns of getting it wrong: three files in a
+project *have* to be committed text — `config.json`, `<lang>.accepted.json`,
+`<lang>.notes.json` — because they hold decisions only a human can make, they live in the app's
+own git repo, and one of them would otherwise carry an API key into it. So **JSON exists no
+matter what**, which means adding a database does not replace a mechanism, it adds a second one.
+
+And nothing here needed SQL. Verified before removing it: **no foreign keys, no cascades**, one
+transaction in 626 lines, ~2,000 rows, one user — and the largest, most-written dataset in the
+whole tool (the translation cache, 346 KB on the JustWrite catalogue) was a plain JSON file the
+entire time the database existed.
+
+Two arguments were used along the way and are **withdrawn** as bad ones:
+- *"JSON is readable, a database is not"* — true of every application with a database. Not a
+  design principle.
+- *"probe.json sets a precedent for gitignored JSON"* — `probe.json` and the caches were the
+  inconsistency, not a precedent. Using existing mess to justify more of it.
+
+### Connections are tool-level now
+
+`settings.json` lives **inside the tool's own clone**, gitignored. You install once and point at
+many apps; a connection is a property of you and your machine, not of JustWrite. Per-project
+storage meant re-entering the same key for every app — which was the actual complaint, and it
+was dismissed once as "costing more than it saves" while picturing a single app.
+
+**Not** `~/.just-ai-help`. Deleting the tool has to delete everything it ever wrote.
+
+A real bug this exposed: with the settings path hardcoded, **the test suite wrote fake
+connections and fake API keys into the developer's own settings file.** `settingsRoot` is a
+parameter now, and the harness gets a throwaway git repo of its own.
+
+### The confirmation pass no longer writes acceptances
+
+Built earlier the same day, it wrote its "correct as-is" verdicts straight into
+`<lang>.accepted.json` stamped `by: "ollama (<model>)"`, and justified that with the `by` field.
+
+That was the wrong reading of the field. `by` exists **because** an agent once wrote 58 verdicts
+into a real project in bulk; it makes a machine verdict *visible*, it does not authorise one.
+
+Now both outcomes are annotations in `.jah-state.json`. A `same` verdict **pre-ticks** a row; a
+`translate` verdict shows its suggestion, unticked. The approval recorded is the human's, with
+their name, and the run still exits non-zero until someone presses the button. `POST /api/accept`
+takes `keys[]`, **one call is one undo**, and the reviewer name comes from your settings.
+
+**The 58 acceptances in JustWrite are deleted.** Every one was `by: "claude (bulk, unreviewed)"`
+— none were the user's. The findings are back in the queue awaiting a real review.
+
+### The server starts with no config
+
+`loadProject()` / one dispatch guard. The tool used to need a config to reach the screen that
+writes a config. Setup is a **full config editor** — source, targets, context, glossary, engine,
+your name — reachable at one entry point, and it **preserves config fields it does not manage**.
+
+Path entry is a validated text box, not a file picker: a browser file input hands JavaScript a
+`File` and never a path, so real "Browse…" means exposing a directory-listing API over
+localhost. Ruled against.
+
+### A pre-existing bug, fixed
+
+`writeKey` dropped the probe entry and the cached back-translation on an edit but **not the
+staged proposal** — so a suggestion made against the old string survived and could be applied
+over newer text, silently reverting a reviewer's own fix.
+
+### Verified
+
+243 tests. The two must-bite tests were watched failing with the logic deliberately broken, then
+restored. End-to-end against a live Ollama: setup with no project → config written → project live
+with no restart → 5 identical findings → engine annotates 4 `same` + 1 `translate` → bulk approve
+records `by: "danel"` → queue drops to the one real defect → one undo restores all four.
+
+**Not verified: the rendered Vue page.** The browser extension was not connected, so the client
+was verified by building it (647 modules, clean) and driving the same API the components call —
+not by looking at it. Someone should open `npm start` and click through the setup tab before
+trusting the layout.
+
+---
+
+## 2026-08-01 — THIS REPO IS BEING REPLACED. Read this before touching anything here.
+
+The decision made today: **just-ai-help is rewritten as a Python app that embeds
+`just-llm-runner`**, in a new repo. This Node repo stays until the rewrite works, then goes.
+
+Nothing below is committed anywhere else. The reasoning is here because it cost a day to reach
+and is not derivable from the code.
+
+### Why the rewrite
+
+`just-llm-runner` is a **Python library**, not a service — apps `pip install -e` it and mount its
+FastAPI router (`from llm_runner import router`; `app.include_router(...)`), and it is frozen into
+each app's bundle. JustWrite and JustVoice both already do this. There is no HTTP daemon to talk
+to, so **a Node app cannot use it at all**.
+
+And it already owns everything the engine half of this repo re-implements, better:
+`runner/hardware.py` (detection), `runner/fit.py` (per-model VRAM fit), `runner/models.py` +
+`download.py` (GGUF acquisition), `runner/binary.py` (fetches prebuilt llama.cpp), `process.py`
+(`compose_flags`, `start_runner`), `autotune.py`, and `llm/` (the online provider adapters —
+anthropic, gemini, openrouter, xai). Plus the UI: `ProviderForm.vue`, `AiModelsArea.vue`,
+`LuModelCatalog`, the knob catalog with its **MoE switch bundle**.
+
+So the binary choice is: be Python and get all of that, or stay Node and maintain a second worse
+copy forever. That is the whole decision.
+
+### The new repo
+
+| | |
+|---|---|
+| name | `just_ai_i18n_docgen`, scaffolded at `E:/Dev/Web/` with `create-tauri-app` |
+| stack | Vite + Vue + Rust/Tauri + Python, same shape as JW and JV |
+| layout | the scaffolder's — `index.html` + `src/` + `src-tauri/` + `public/` at the root. **NO `src/renderer/`**; that was an Electron habit and JW has now been corrected |
+| python | `server/src/just_ai_i18n_docgen/` — src-layout, app name used once, no `_server` stutter on the package. Console script `just-ai-i18n-docgen-server` (the `-server` suffix exists ONLY because a same-named console script makes Windows spawn the Tauri binary itself) |
+| port | **8742** (JW 17495, JV 8741) |
+| state | scaffolded only. No `server/`, no kit alias, no `npm install` |
+
+**Carried over:** shielding, the checks, probe ranking, acceptance-with-expiry, the confirmation
+pass, the docs→locale-keys extractor, the review panes.
+**Deleted, because llm-runner owns it:** `settings.js`, `engine.js`, `engines.json`,
+`docs/models.md`, `docs/engines.md`, all hardware/model selection.
+
+### THE MODEL MEASUREMENTS IN THIS REPO ARE NOT WHAT THEY CLAIM
+
+`docs/models.md` presents its timings as model comparisons. They are comparisons of an
+**unconfigured Ollama**. The only knobs the loop ever sent are:
+
+    options: { temperature: 0.2, num_predict: 8192 },  think: false
+
+No `num_ctx` (the model reports 262,144; Ollama's default applies). **No `n-cpu-moe`** — the
+expert-offload switch that is the entire reason to run a 26B-A4B MoE on an 8 GB card, and which
+Ollama does not expose at all. No MTP.
+
+llm-runner already researched this and measured it: `--n-cpu-moe 32` runs a **35B-A3B at ~30 tok/s
+on a 6 GB card**, and its rule is *MoE → lean on `--n-cpu-moe`, skip spec decoding; dense → use MTP*.
+So MTP was never the lever for our model — `n-cpu-moe` was, and nothing set it.
+
+The numbers are therefore a **floor, not the model's capability**, and the comparison understates
+the MoE specifically, because MoE gains most from the placement nothing configured. The accuracy
+findings are unaffected — tuning changes speed, not correctness.
+
+### Uncommitted work sitting in this repo
+
+A full day, never committed, and it should be read before it is thrown away — several pieces
+carry measurements:
+
+- **SQLite removed.** `db.js` + `store.js` (626 lines) → `state.js` + `settings.js`. Rationale:
+  three files MUST be committed text (`config.json`, `<lang>.accepted.json`, `<lang>.notes.json`),
+  so JSON exists regardless and a database is a second mechanism rather than a replacement. No
+  foreign keys, no cascades, one transaction in 626 lines, and the largest dataset was already a
+  plain file.
+- **Connections went tool-level** — `settings.json` inside the tool's own clone, gitignored.
+  Never `~/.just-ai-help`; deleting the tool must delete everything it wrote.
+- **The confirmation pass** (`confirm.js`) — asks the engine about keys whose translation came
+  back byte-identical. Measured: 57 of 71 called correct, **20/20 long planted skips caught,
+  37/40 short**. It writes ANNOTATIONS only; the engine never signs `<lang>.accepted.json`.
+- **Bulk approve** — `POST /api/accept` takes `keys[]`, one call is one undo, records who.
+- **The server can start with no config** — `loadProject()` + one dispatch guard, so a setup
+  screen is reachable before a config exists.
+- **Prose out of every JSON file**, including the four the tool writes.
+
+### Rules that came out of today and are not in any code
+
+- **No CI.** Never justify a design with it. `--check-only` is the check a human runs before
+  shipping. Docs still calling it "THE CI gate" are wrong.
+- **Never `~/.tool` or `%APPDATA%`.** Deleting a clone must delete everything it wrote.
+- **Use the scaffolder.** `create-tauri-app` exists; hand-rolling its layout is what produced
+  `src/renderer/` in two apps and a day of unpicking.
+- **A "go" is scoped to the plan as it stood in that message.** Discussion afterwards voids it.
+
+### Still open
+
+- ~~**JustVoice**~~ — **DONE 2026-08-01, `JustVoice@c410370`, pushed.** Same move as JW's `b5de1fc`.
+  The watcher exposure was measured there rather than assumed: **381 files guarded vs 30,881
+  unguarded** (its Python `server/` is 17,865 of that, `src-tauri/` 12,510), first HTML 500 ms vs
+  6,191 ms. Two paths escaped the moved subtree, both in one production file. One trap worth
+  carrying: **`server.watch.ignored` passed inline to `createServer()` loses silently to the config
+  file**, so a first comparison reported "no difference" with both runs guarded — compare config
+  FILES, and read `resolveConfig()` to see which won.
+- **JW's Spanish catalogue** now shows ~54 identical-string findings again, because the 58
+  machine-written acceptances were deleted. They are unreviewed and need a human.
+- **The ~134 probe disagreements** in that catalogue, never triaged.

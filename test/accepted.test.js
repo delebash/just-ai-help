@@ -80,13 +80,16 @@ test("the hash separates fields that would otherwise concatenate the same", () =
 	assert.equal(a, acceptanceHash({ key: "a|b", code: "c", src: "x", dst: "y" }));
 });
 
-test("a sidecar round-trips, keeps its _why, and ignores metadata keys on read", () => {
+test("the accepted file round-trips and holds DATA ONLY — no prose", () => {
 	const dir = mkdtempSync(join(tmpdir(), "jah-accepted-"));
 	const path = join(dir, "es.accepted.json");
 	saveAccepted(path, accept(FINDING, SRC, DST));
 
 	const onDisk = JSON.parse(readFileSync(path, "utf8"));
-	assert.ok(onDisk._why.length > 0, "the file explains itself to whoever finds it in a diff");
+	// JSON is for parsers. This file used to embed a paragraph under `_why`; that is
+	// documentation and it lives in docs/CONFIG.md now.
+	assert.equal(onDisk._why, undefined, "prose must not be written into a JSON file");
+	assert.ok(!Object.keys(onDisk).some((k) => k.startsWith("_")), "no metadata keys at all");
 	// The entry is human-readable, so a reviewer can audit what was waved through.
 	const entry = Object.values(onDisk).find((v) => typeof v === "object");
 	assert.equal(entry.key, "common.no");

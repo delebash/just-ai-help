@@ -4,9 +4,18 @@ just-ai-help.config.json
 *.log
 .evidence/
 
-# The review workspace's store: review progress, undo history, proposals, run
-# history — and API KEYS. src/db.js refuses to save a key unless this line is
-# present, because "I assumed it was ignored" is how a key ends up published.
+# YOUR settings: engine connections and API KEYS. server/settings.js refuses to
+# save a key unless this line is present, because "I assumed it was ignored" is
+# how a key ends up published. Ignored also means `git pull` updates the tool
+# and never touches your setup — and deleting this clone deletes your keys.
+settings.json
+
+# Per-project workshop state, written into the app being translated, never here.
+# Listed so a stray copy in this repo is ignored too.
+.jah-state.json
+
+# The SQLite store this replaced on 2026-07-31. Kept ignored so an old working
+# copy does not suddenly show a database as untracked.
 .jah.db
 .jah.db-journal
 .jah.db-wal

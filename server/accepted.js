@@ -65,24 +65,15 @@ export function loadAccepted(path) {
 	}
 }
 
-const SIDECAR_WHY =
-	"Findings a reviewer judged CORRECT. NOTHING here was fixed — fixing a translation makes its finding" +
-	" disappear on its own and records nothing. These are the opposite case: the translation was already" +
-	" right and the CHECK was wrong to flag it (the Spanish for 'No' is 'No'). They are written down" +
-	" because the checks have no memory — they re-read the files from scratch every run, so without this" +
-	" the same findings fire forever and --check-only can never go green. Committed on purpose: CI runs" +
-	" against a fresh clone, so acceptances kept anywhere gitignored would be missing exactly where the" +
-	" gate needs them. Each entry is keyed by a hash of (key, code, source, target) — NEVER a per-key" +
-	" exemption — so changing the English or editing the translation brings the finding straight back." +
-	" Delete an entry to un-accept it. Every run prints how many were hidden." +
-	" `by` and `at` record WHO signed each one off: an entry written by a script or an agent says so," +
-	" and `unknown` means nobody claimed it. Provenance is outside the hash, so re-accepting under a" +
-	" different name updates the entry instead of adding a second one.";
-
-/** Writes the sidecar, metadata first, entries sorted so the diff is stable. */
+/**
+ * Writes the file, entries sorted so the diff is stable.
+ *
+ * Data only — what this file is for is documented in docs/CONFIG.md. `_`-prefixed keys are
+ * skipped on read, so a file from an older version still loads.
+ */
 export function saveAccepted(path, entries) {
 	const sorted = Object.fromEntries(Object.entries(entries).sort(([a], [b]) => (a < b ? -1 : 1)));
-	writeFileSync(path, `${JSON.stringify({ _why: SIDECAR_WHY, ...sorted }, null, 2)}\n`);
+	writeFileSync(path, `${JSON.stringify(sorted, null, 2)}\n`);
 }
 
 /**

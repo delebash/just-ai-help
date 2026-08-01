@@ -23,7 +23,10 @@
 //       es.notes.json              <- per-key knowledge       (committed)
 //       es.probe.json              <- second-pass measurement (not committed)
 //       .jah-cache.json            <- disposable              (not committed)
-//       .jah.db                    <- workshop state, secrets (not committed)
+//       .jah-state.json            <- workshop state          (not committed)
+//
+// Your engine connections and API keys are NOT here — they are tool-level, in settings.json
+// inside the tool's own folder, because you install once and point at many apps.
 //     <app>/src/.../i18n/locales/
 //       en.json  es.json           <- APP ASSETS ONLY, nothing else
 //

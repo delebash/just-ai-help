@@ -10,7 +10,7 @@ it does; this page just tells you what to run.
 
 ## 1. What you need
 
-- **Node 24 or newer.** That is the whole install for a user: the review UI ships as a committed build and SQLite is inside Node itself.
+- **Node 24 or newer.** That is the whole install for a user: the review UI ships as a committed build and every piece of state is a plain JSON file.
 - **An engine**: either Ollama on your own machine (free, private, slower) or an online API
   key (fast, costs money or is heavily rate-limited).
 
@@ -18,7 +18,7 @@ it does; this page just tells you what to run.
 node --version      # v24+
 git clone <this repo>
 cd just-ai-help
-npm test            # 195 tests, should all pass
+npm test            # 244 tests, should all pass
 ```
 
 ---
@@ -65,9 +65,11 @@ Full numbers and the reasoning: [`models.md`](models.md).
 
 ### Or use an online model
 
-Pick a row from **`server/config/engines.json`** — that file is the list, and each row carries
-its own note saying what it costs and whether it has ever been measured. Set `"engine"` to the
-row name and export the key it asks for.
+Pick a provider from **[`engines.md`](engines.md)** — it lists every row with what it costs and
+whether anyone has ever measured it. Set it up in the app: `npm start`, **Setup**, **Engine**.
+
+(The rows themselves live in `server/config/engines.json`, which is data only. It used to carry a
+note per row; that prose is in `engines.md` now, because JSON is for parsers.)
 
 The rows are not enumerated here on purpose: a copy of that list in prose goes stale, and this
 page's copy already had, naming five engines when eight shipped. The review workspace shows the
@@ -147,16 +149,57 @@ The older key names (`localesDir`, `sourceLanguage`, `glossary.doNotTranslate`) 
 ```bash
 node server/init.js      path/to/en.json               # 0. once per app: writes the config
 node server/translate.js config.json                  # 1. translate what changed, then check
+                                                      # 1b. …and confirm the identical ones (auto)
 node server/translate.js config.json --probe          # 2. (optional) second opinion on meaning
 node server/review.js    config.json                  # 3. fix what got flagged
 node server/translate.js config.json --accept <key>   # 3b. mark a flag as correct, not a defect
-node server/translate.js config.json --check-only     # 4. in CI: verify, no engine needed
+node server/translate.js config.json --check-only     # 4. verify before shipping, no engine needed
 ```
 
 **1 — Translate.** Only keys that are new or changed get sent to the model; everything else is
 left alone, so re-runs are cheap and your hand-edits survive. When it finishes it re-reads the
 files it wrote and reports anything wrong: missing keys, mangled `{placeholders}`, lost plural
 forms, translated brand names, missing Spanish `¿`, and more.
+
+**1b — The confirmation pass runs automatically.** After translating, some keys come back
+*byte-identical to the English*. That is four different situations wearing one badge:
+
+| | |
+|---|---|
+| not words at all | `A`, `H2`, `{n}s`, `x²` — a button glyph has no Spanish |
+| stays English | `EPUB`, `RAG`, `JustWrite` — product and format names |
+| Spanish uses the same word | `Color`, `Error`, `total`, `neutral` |
+| **the model skipped it** | `books` should be `libros` — **a real defect** |
+
+A string comparison cannot separate them. A fresh 2,000-key catalogue raises about **70** of
+these, nearly all correct, and the one genuine miss hides inside the pile.
+
+So the tool asks the engine about exactly those keys — and only those. Everything it *changed* is
+already proven translatable, so the candidate set is about **3% of a catalogue**, roughly a
+minute. What it decides:
+
+- **"correct as-is"** → **pre-ticks that row** in the review page's *Came back identical* bucket.
+- **"this was skipped"** → the suggested translation shows beside the finding, **unticked**.
+
+**The engine never signs anything off.** Both outcomes are annotations in `.jah-state.json`; the
+approval that gets recorded is yours, with your name on it, when you press the button. An earlier
+version wrote acceptances straight into `<lang>.accepted.json` stamped `by: "ollama (…)"`, which
+was wrong: that file is the *human* record and it is what makes the check pass. So the run still
+exits non-zero until you approve — and the bulk control is what makes that cheap.
+
+**In the review page:** open **Came back identical**, hit *tick the N the engine calls correct*,
+skim, untick anything you doubt, press **Approve**. One click, one undo. Seventy keys is about
+two minutes.
+
+**It never applies a translation.** Of ten suggestions measured, `{n} w` → `{n} min` was wrong
+(`w` is *words*), `TODO` → `TODO POR HACER` mangled a glossary term, and "elevator pitch" got two
+different answers in the same run.
+
+Measured 2026-07-31 on the 2,039-key JustWrite catalogue: **57 of 71 called correct, 20/20 long
+planted skips caught, 37/40 short ones** — a ~7.5% false-clear rate on very short strings (`OK`
+and `pan` were both waved through), which is exactly why a human still presses the button.
+`--no-confirm` turns it off; it never runs under `--check-only`, which stays offline and
+engine-free.
 
 **2 — Probe (optional).** The checks above catch *form* problems. A translation can pass all
 of them and still say the wrong thing. `--probe` translates everything a second time with the
@@ -206,7 +249,7 @@ engine never writes your catalogue, you do. So cancelling a fifty-minute run cos
 **Keyboard:** `j`/`k` move · `a` accept · `u` undo · `e` edit · `g` Google · `/` search.
 
 Your locale JSON, acceptances and notes stay ordinary committed files — you can still just edit
-the JSON. Review progress, undo history and engine connections live in `.jah.db`, which is
+the JSON. Review progress and undo history live in `.jah-state.json`; your engine connections and keys live in `settings.json` inside the tool's own folder, which is
 gitignored; deleting it loses your place, never your work.
 
 **3b — Some flags are not defects.** Start with the distinction, because the name misleads:

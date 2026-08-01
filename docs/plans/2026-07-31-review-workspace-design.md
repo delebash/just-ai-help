@@ -1,5 +1,13 @@
 # The review workspace — design, 2026-07-31
 
+> **SUPERSEDED IN PART, 2026-07-31 (late).** The storage design below is no longer what ships.
+> SQLite (`.jah.db`) was removed and replaced by plain JSON: `.jah-state.json` per project and
+> `settings.json` in the tool folder. "CI gate" language is also out — the user does not run CI;
+> `--check-only` is the check you run before shipping. The REASONING here about what must be a
+> committed file and what is disposable workshop state is still correct and is why the split
+> survived the storage change. See `docs/HANDOFF.md` for the current state.
+
+
 Status: **design, awaiting the user's go to implement.** No production code written.
 
 Supersedes STEP 7 of [`2026-07-27-v2-design-executor-plan.md`](2026-07-27-v2-design-executor-plan.md),

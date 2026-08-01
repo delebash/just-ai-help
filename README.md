@@ -16,7 +16,7 @@ Two functions, one pipeline:
 They share one repo because they share the pipe: function 2 emits keys, function 1 translates
 them.
 
-> **Node 24+ and nothing else to run it.** The review UI ships as a committed build and SQLite
+> **Node 24+ and nothing else to run it.** The review UI ships as a committed build and all state
 > is part of the runtime, so there is no install step for a user; `npm install` is only for
 > developing the UI. The translation pipeline itself has no runtime dependencies — it used to
 > wrap [`i18n-ai-translate`](https://github.com/taahamahdi/i18n-ai-translate) and that wrapper
@@ -213,7 +213,7 @@ component kit the other apps use, served from a committed build — so this need
 
 - **Un-accept.** Approving a finding was one-way, and accepted keys then vanished entirely, so
   a decision could never be revisited. They are now a visible bucket, reversible in one click.
-- **Undo anything**, across days. The action log is in SQLite, not browser memory, so an accept
+- **Undo anything**, across days. The action log is on disk, not in browser memory, so an accept
   made on Friday is still undoable on Monday.
 - **Re-translate from the page** — one key or a whole scope, with progress, cancel, and rejoin
   after a reload. Results arrive as **proposals**: an engine never writes the catalogue, a
@@ -237,7 +237,7 @@ possible. There is a test for exactly that.
 
 **What lives where.** The locale JSON, acceptances and notes stay committed files — the app
 loads them and `--check-only` reads them, so deleting the workspace database must never break
-a build, and there is a test for that too. `.jah.db` (gitignored) holds review progress, undo
+a build, and there is a test for that too. `.jah-state.json` (gitignored) holds review progress, undo
 history, proposals, run history and engine connections.
 
 ### Some findings are correct — `--accept`
@@ -252,7 +252,7 @@ a finding are opposites:
 
 Not every flag is a defect. The correct Spanish for `"No"` is `"No"`, and `untranslated` will
 say so on every run, forever. Left alone that has a consequence worse than noise: **a perfect
-catalogue can never exit 0**, and `--check-only` is the CI gate. A gate that cannot go green is
+catalogue can never exit 0**, and `--check-only` is the check you run before shipping. A check that cannot go green is
 one people stop reading, which is precisely how the next real miss ships.
 
 The reason a verdict has to be *stored* rather than just acted on: **the checks have no memory.**

@@ -27,9 +27,16 @@ writes a config it derived from the strings themselves:
   "source": "../src/i18n/locales/en.json",
   "targets": ["es"],
   "context": "",
-  "glossary": []
+  "glossary": [],
+  "engine": "ollama"
 }
 ```
+
+`engine` names a row in [`engines.json`](#2-serverconfigenginesjson--the-engine-catalogue) and is
+written with the shipped default. It used to be omitted, and the next command then died with
+`unknown engine "undefined"` — setup that reports success and leaves you unable to run. Change it
+with `--engine <row>`, or edit the file. The default lives in `engines.json` as `"default": true`,
+so moving it is a data edit.
 
 | | |
 |---|---|
@@ -64,7 +71,7 @@ the translation memory. That is the test of whether the split is right:
 your-app/
   just-ai-help/
     config.json          es.accepted.json    es.notes.json     ← committed
-    .jah.db              es.probe.json       .jah-cache.json   ← gitignored
+    .jah-state.json      es.probe.json       .jah-cache.json   ← gitignored
   src/…/i18n/locales/
     en.json  es.json  fr.json                                  ← app assets, nothing else
 ```
@@ -77,12 +84,12 @@ from your `en.json` or lives in the review workspace:
 | `localesDir`, `sourceLanguage` | derived from `locales` — its folder, its filename |
 | `placeholder` | read from `en.json` — `{n}` or `{{n}}` is visible in your own strings |
 | `pluralSeparator` | read from `en.json` — and `null` is a real answer |
-| engine, key, overrides | a **connection** in the workspace, so a key is never in a committed file |
+| engine, key, overrides | a **connection** in `settings.json`, tool-level — set up once, used by every app |
 
 Inference never decides quietly: a run prints what it read, and an explicit value always wins.
 The older key names still work, so upgrading does not invalidate a config.
 
-> **The `cd` is gone.** Every path — locales, sidecars, cache, database — resolves against the
+> **The `cd` is gone.** Every path — locales, sidecars, cache, state — resolves against the
 > **config file's own directory**, never the shell's. Run from anywhere:
 
 ```bash
@@ -97,24 +104,132 @@ resolver from an unrelated directory so it cannot come back.
 
 ---
 
+## 1b. `settings.json` — YOURS, in the tool's folder
+
+**Your engine connections, API keys and the name recorded on your approvals.** Tool-level on
+purpose: you install this once and point it at as many apps as you like, so a connection is a
+property of *you and your machine*, not of any one project. Storing them per-project meant
+re-entering the same Ollama URL and the same key for every app.
+
+| | |
+|---|---|
+| lives | `settings.json`, **inside the tool's own clone** |
+| committed | **no** — gitignored, so `git pull` never overwrites your setup |
+| written by | the setup screen and the engine panel in the review workspace |
+
+**Not a home-directory dotfile on purpose.** `~/.just-ai-help` and `%APPDATA%` are exactly the
+litter that survives an uninstall; deleting this clone has to delete everything it ever wrote,
+including your keys.
+
+Which engine a project *uses* stays in that project's `config.json` (`"engine": "ollama"`).
+This file only says how to *reach* one — so a project config never carries a credential, and two
+apps can use different engines without duplicating your setup.
+
+**The key guard.** `server/settings.js` refuses to save an API key unless `git check-ignore`
+agrees the file is ignored. It asks git rather than parsing `.gitignore`, because real gitignore
+semantics include parent directories, negation and globs — a hand-rolled parser got that wrong in
+the direction that matters.
+
+---
+
 ## 2. `server/config/engines.json` — the engine catalogue
 
 **Shipped with the tool. You normally do not edit this.** One row per AI engine: URL, transport,
 model id, timeouts, batch size, and per-provider quirks like Ollama's `think` flag. Every field
 in it exists because something failed once — a stale model id 404'd 19 of 40 keys, a thinking
-model with no token headroom returned empty content.
+model with no token headroom returned empty content, and OpenAI's 120 ms default rate limit was
+applied to a provider with a ~15 RPM tier.
 
-Since 2026-07-31 this file is a **seed**, not live config. On every start its rows are loaded
-into the `providers` table of `.jah.db`, replacing it wholesale — so updating the tool fixes a
-moved endpoint for everyone. **Your** choices (which provider, your key, any field you changed)
-live in the `connections` table and are never touched by that reseed.
+**It is DATA ONLY.** Until 2026-07-31 this file carried ~13 KB of `_note`/`_why` prose. That is
+gone: which model to run and what it costs you is in [`models.md`](models.md); what each field
+means is right here. The rule it broke is the one this page states about `models.json`:
+**if nothing parses it, it is prose, and prose belongs in `.md`**.
 
-Add a provider by adding a row here. Change what *you* run by editing a connection in the review
-workspace instead.
+This file **is** the catalogue and is read directly — there is no copy of it anywhere and no
+seeding step, so updating the tool fixes a moved endpoint or a stale model id for everyone.
+**Your** choices (which provider, your key, any field you overrode) live in `settings.json` in
+the tool's own folder and are never touched by an update.
 
-Read by `server/db.js` (seeding) and `server/translate.js` (the CLI path).
+Add a provider by adding a row here. Change what *you* run by editing a connection in the
+review workspace instead.
 
-## 3. `server/config/conventions.json` — per-language rules
+Read by `server/settings.js` (the workspace) and `server/translate.js` (the CLI).
+
+### The profile schema
+
+PROFILE SCHEMA v2 — the shape the owned translate loop reads. Every field below is DATA, which is the whole point: every failure of 2026-07-27 (--think, chat_template_kwargs, a stale model id, the wrong rate limit) had one disease, that the request body belonged to somebody else and we could not reach it. `extraBody` is the general cure — it merges into the request verbatim, so `think:false`, `chat_template_kwargs.enable_thinking` and `reasoning_effort` become config rather than code.
+
+| field | meaning |
+|---|---|
+| `kind` | "openai-compat" (POST {url}/chat/completions) or "ollama" (POST {url}/api/chat). Two transports, both proven accepted 2026-07-27. |
+| `url` | base URL of the server. No trailing slash. |
+| `model` | model id. A value starting "REQUIRED" means the config must supply it — a local server's model id is whatever YOU serve. |
+| `apiKeyEnv` | optional. Name of the env var holding the key. Absent = no key needed. The key is never written to a file. |
+| `headers` | optional. Extra request headers, merged verbatim. |
+| `extraBody` | optional. Merged into the JSON request body verbatim, last. The general pass-through. ONE exception: for kind "ollama", `extraBody.options` is merged one level deep into the built `options` rather than replacing it — otherwise setting num_ctx would silently drop temperature and the output cap. Temperature can be overridden here too; the --probe guard reads the EFFECTIVE temperature of the built request (loop.js effectiveTemperature), so an override to 0 is refused rather than silently measuring nothing. |
+| `think` | optional. Ollama's top-level `think` field: false \| true \| "low" \| "medium" \| "high". Omitted when undefined, which leaves the model's own default alone. There is no GLOBAL default — the value belongs to the row, matched to the model that row names, because whether thinking helps is a property of the model and not of the transport. A row naming a thinking model carries `think: false` or it returns empty content; a row naming a non-thinking model omits the field. |
+| `batchSize` | how many keys go in one request. |
+| `rateLimitMs` | optional. Minimum gap between requests. Omit or 0 for a local server. |
+| `timeoutMs` | per-request timeout. Derived from measurement — each row says from what. |
+| `maxOutputTokens` | output-token cap for one request. Was `batchMaxTokens`; renamed because it is now ours and it caps output, not a batch. |
+
+### Field notes that are not obvious from the schema
+
+**`gemini-free`**
+
+- `timeoutMs` — 94 s for the entire 40-key corpus, so 120 s per request is roughly 4x the worst single batch.
+
+- Compatibility — The v1beta/openai endpoint returned bodyless 400s to i18n-ai-translate's zod-generated response_format. Owning the request body is exactly what makes that reachable — but it is UNVERIFIED against our own loop.
+
+**`ollama`**
+
+- `default` — The row `init` writes into a new project's config. A marker here rather than a constant in init.js, so the shipped default has exactly one definition and adding a better row is still a data edit. Exactly one row may carry it.
+
+- `think` — `think: false` belongs to THIS row because this row names a thinking model: without it the model returns empty content on every retry, deliberation having consumed the whole 8,192-token budget before any answer was written (measured 2026-07-28 — it is the first thing that happened when the MoE was tried). There is no global default, and the value is per-row for a reason. If you override `model` here, set `think` to suit the model you named: sending `think: false` to a non-thinking model is harmless (verified 2026-07-29 — gemma3:12b answers normally), but sending it to a DIFFERENT thinking model selects a measurably worse mode. Measured 2026-07-27 on qwen3:8b: thinking off is 13x faster (27 s -> 2 s) and it TRANSLATED THE PLACEHOLDER, returning "{nota} nota | {nota} notas" where the thinking run returned "{n} nota | {n} notas".
+
+- `timeoutMs` — the 40-key corpus at batch 16 is 3 requests; the slowest model that finished it took 366 s overall, so ~120 s for a worst batch. 300 s per request keeps headroom for that plus a cold model load, on hardware slower than the 8 GB card these were measured on.
+
+**`ollama-gemma3`**
+
+- `think` — no `think` field, and that is correct for this row: gemma3:12b is not a thinking model, so there is nothing to switch off and the model's own default is the right one.
+
+- `timeoutMs` — same reasoning as the `ollama` row — identical transport, batch and output cap.
+
+**`local-openai-compatible`**
+
+- `timeoutMs` — same reasoning as the ollama row — local generation, smaller batch.
+
+**`groq`**
+
+- `rateLimitMs` — 30 requests/minute published = one per 2s. 2100ms leaves a margin, because a 429 mid-run costs a retry and the whole point of a rate limit field is that the wrong one burns the run — measured on a different provider on 2026-07-27.
+
+### One row per default
+
+Exactly one row carries `"default": true` — the row the setup screen writes into a new
+project's config. A marker in the data rather than a constant in `init.js`, so swapping the
+recommended default is a data edit like adding a provider. `defaultEngine()` throws if the
+count is anything but one, because a silently-wrong default surfaces as a failed run in
+somebody else's project.
+
+## 3. `server/config/languages.json` — the language menu
+
+A bare array of BCP 47 codes: the languages the setup screen offers as translation targets.
+
+**Codes only.** The display name for each is derived at runtime from `Intl.DisplayNames` in the
+reader's own locale, so no English name is stored here to go stale or be wrong, and the menu
+reads correctly for a Spanish-speaking user with nobody translating it.
+
+**It is a menu, not a whitelist** — nothing validates against it, and a code that is not listed
+still works if it reaches the config another way.
+
+**Why a file at all:** no runtime API *enumerates* languages. `Intl.DisplayNames` names a code
+you already have and `Intl.supportedValuesOf` does not cover languages, so the list has to be
+written down, and data belongs in a data file. Regional variants appear only where the split
+genuinely changes the translation (`pt`/`pt-BR`, `zh-Hans`/`zh-Hant`, `es`/`es-419`,
+`fr`/`fr-CA`); thirty flavours of English would be noise in a menu you use once per project.
+
+Read by `server/server.js` (the setup screen).
+## 4. `server/config/conventions.json` — per-language rules
 
 Rules a target language requires regardless of what the source did. Currently Spanish only:
 questions and exclamations open with `¿` / `¡`. Two halves — a line injected into the prompt, and
@@ -147,8 +262,9 @@ Two different kinds of file, and they go to two different places on purpose.
 | `<lang>.accepted.json` | findings a reviewer judged correct, hashed over (key, code, source, target) so they expire when either string changes, plus `by`/`at` recording who signed off | yes |
 | `<lang>.notes.json` | per-key notes from review; sent with that key on its next translation, so a fix found once is not rediscovered | yes |
 | `<lang>.probe.json` | the second pass from `--probe` — a measurement | no |
+
 | `.jah-cache.json` | what has already been translated | no |
-| `.jah.db` | workshop state and your keys | no |
+| `.jah-state.json` | workshop state: review cursor, undo log, staged proposals, confirmation verdicts, run history | no |
 
 **Why the split.** `locales/` has a contract: *these are the app's translations*. Review
 artefacts are not — nothing in the app reads them. Keeping them out is not tidiness: the fix
@@ -172,7 +288,7 @@ links, and shows every edit as one enormous changed line. It is
 [`models.md`](models.md) now. The rule it broke is worth stating: **JSON is for what a parser
 reads. If nothing parses it, it is prose, and prose belongs in `.md`.**
 
-`.jah.db` — not config. It is the review workspace's store: your place in a review, undo history,
+`.jah-state.json` — not config. Workshop state: your place in a review, undo history,
 staged proposals, run history, and engine connections including keys. **Gitignored, and the tool
 refuses to save a key unless `git check-ignore` agrees it is.** Deleting it loses your place in a
-review and never your work — there is a test asserting the CI gate still passes without it.
+review and never your work — there is a test asserting the check still passes without it.

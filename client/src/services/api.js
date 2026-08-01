@@ -30,7 +30,9 @@ export const api = {
 	accepted: (lang) => call("GET", `/api/accepted?lang=${encodeURIComponent(lang)}`),
 
 	save: (lang, key, value) => call("POST", "/api/save", { lang, key, value }),
-	accept: (lang, key) => call("POST", "/api/accept", { lang, key }),
+	// keys[] on purpose: a fresh catalogue raises ~70 identical-string findings that are almost
+	// all correct output, and one-at-a-time is why a session once scripted 58 of them unasked.
+	accept: (lang, keys) => call("POST", "/api/accept", { lang, keys: Array.isArray(keys) ? keys : [keys] }),
 	unaccept: (lang, key, code = null) => call("DELETE", "/api/accept", { lang, key, code }),
 	undo: (lang = null) => call("POST", "/api/undo", { lang }),
 	history: (lang) => call("GET", `/api/history${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
@@ -48,6 +50,8 @@ export const api = {
 	reference: (lang, key) => call("GET", `/api/reference?lang=${encodeURIComponent(lang)}&key=${encodeURIComponent(key)}`),
 
 	engines: () => call("GET", "/api/engines"),
+	reviewer: () => call("GET", "/api/reviewer"),
+	setReviewer: (reviewer) => call("PUT", "/api/reviewer", { reviewer }),
 	saveConnection: (conn) => call("PUT", "/api/engines/connection", conn),
 	runs: (lang) => call("GET", `/api/runs${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`),
 
@@ -79,4 +83,12 @@ export function jobStream(onEvent) {
 }
 
 /** The URL of the same-origin page that hosts the Google Translate widget. */
+/** Setup — the only calls that work with NO project loaded. */
+export const setup = {
+	state: () => call("GET", "/api/setup/state"),
+	inspect: (path) => call("POST", "/api/setup/inspect", { path }),
+	save: (payload) => call("POST", "/api/setup/save", payload),
+	reviewer: (reviewer) => call("PUT", "/api/setup/reviewer", { reviewer }),
+};
+
 export const gtFrameUrl = (text, tl) => `/gt-frame?text=${encodeURIComponent(text)}&tl=${encodeURIComponent(tl)}`;

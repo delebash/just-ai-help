@@ -1,8 +1,15 @@
 {
-  "_doc": "Data only. Why this file exists, the 56-spurious-¿ incident that shaped the Spanish rule, and what you need before adding a language: docs/language-rules.md",
-
   "es": {
-    "pairedPunct": [["¿", "?"], ["¡", "!"]],
+    "pairedPunct": [
+      [
+        "¿",
+        "?"
+      ],
+      [
+        "¡",
+        "!"
+      ]
+    ],
     "promptLine": "Spanish punctuation is paired: a sentence that IS a question must open with ¿ and close with ?, and one that IS an exclamation must open with ¡ and close with !. Apply this ONLY when the English is itself a question or exclamation — most UI strings are labels, titles, buttons or statements, and those stay declarative. Never turn a statement into a question"
   }
 }

@@ -36,11 +36,13 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { acceptanceEntry, acceptanceHash, loadAccepted, partitionAccepted, saveAccepted, UNKNOWN_REVIEWER } from "./accepted.js";
 import { buildContext, runChecks, summarise } from "./checks.js";
+import { attachConfirmations, CONFIRM_CODE, confirmIdentical } from "./confirm.js";
 import { resolveEngineRow } from "./engine.js";
 import { inferConfig } from "./infer.js";
 import { flatten, rebuild } from "./jsonutil.js";
 import { effectiveTemperature, translateLanguage } from "./loop.js";
 import { projectPaths } from "./paths.js";
+import { confirmations, openProject, putConfirmation } from "./state.js";
 import { rankSuspects, spread } from "./suspects.js";
 
 const argv = process.argv.slice(2);
@@ -57,6 +59,17 @@ const force = argv.includes("--force");
 // use it without re-running the engine. Its temperature guard lives after the profile is
 // resolved, because only the resolved profile knows the EFFECTIVE temperature.
 const probe = argv.includes("--probe");
+// The confirmation pass asks the engine about the keys that came back byte-identical to the
+// source — the one finding a string comparison cannot resolve, because "A", "EPUB", "Color" and
+// a genuinely skipped "books" all look the same to it. It runs by DEFAULT after a translate,
+// because the candidate set is ~3% of a catalogue (measured: 71 keys, ~1.5 min) and the thing
+// it catches is a defect hiding inside correct output. `--no-confirm` opts out.
+//
+// It never runs under --check-only: that gate is offline and deterministic by definition, and
+// an engine call there would make CI depend on a model being up. See confirm.js.
+const noConfirm = argv.includes("--no-confirm");
+/** The profile the translate pass resolved, so the confirmation pass reuses it rather than re-deriving one. */
+let translateProfile = null;
 const escalateTo = argv.includes("--escalate") ? argv[argv.indexOf("--escalate") + 1] : null;
 const escalateIdx = escalateTo ? argv.indexOf("--escalate") + 1 : -1;
 // --accept records the CURRENT findings for one or more keys as reviewed-and-correct. It calls
@@ -87,6 +100,8 @@ const engines = JSON.parse(readFileSync(new URL("./config/engines.json", import.
 // vanishing when a command is run from somewhere else.
 const paths = projectPaths(configPath, rawCfg);
 const localesDir = paths.localesDir;
+// This project's workshop state — confirmation verdicts, and nothing a human decided.
+const confirmStore = openProject(paths.configDir);
 const sourceFile = paths.sourceFile;
 const sourceRaw = JSON.parse(readFileSync(sourceFile, "utf8"));
 const src = flatten(sourceRaw);
@@ -94,7 +109,7 @@ const src = flatten(sourceRaw);
 // Fields the catalogue itself can answer are read from it. An explicit config value always
 // wins; inference only fills a gap, and says so rather than deciding quietly.
 const { cfg, inferred } = inferConfig(rawCfg, src);
-if (inferred.length) console.log(`Read from ${cfg.sourceLanguage ?? "en"}.json: ${inferred.join(", ")}`);
+if (inferred.length) console.log(`Read from ${paths.sourceLanguage}.json: ${inferred.join(", ")}`);
 
 // Conventions the target language requires regardless of what the source did. Read on both
 // paths: the loop puts `promptLine` in the prompt, the checks use `pairedPunct` to find out
@@ -210,6 +225,11 @@ function allFindings(lang, targetFlat) {
 			}),
 		];
 	}
+	// The confirmation pass's annotation rides along on the finding it belongs to, so the report
+	// and the review workspace both show the same thing without either calling an engine. A
+	// verdict whose hash no longer matches is IGNORED, not shown — the same expiry an acceptance
+	// follows, so editing either string retires the machine's opinion about it.
+	findings = attachConfirmations(findings, confirmations(confirmStore, lang), src, targetFlat);
 	// Reviewer verdicts come off LAST, so an acceptance can clear a suspect as well as a check
 	// — and so --escalate never spends engine time re-doing a key a human already signed off.
 	return partitionAccepted(findings, loadAccepted(acceptedPath(lang)), src, targetFlat);
@@ -310,7 +330,11 @@ if (escalateTo) {
 	}
 	console.log(`Elapsed ${((Date.now() - started) / 1000).toFixed(1)}s`);
 } else if (!checkOnly) {
-	const profile = resolveProfile(cfg.engine, { applyConfigOverrides: true });
+	// Declared in the outer scope: the confirmation pass runs AFTER this block and needs the
+	// same resolved profile, and re-resolving it there would be a second answer to "which
+	// engine is this run using" — the exact drift server/engine.js exists to prevent.
+	translateProfile = resolveProfile(cfg.engine, { applyConfigOverrides: true });
+	const profile = translateProfile;
 	// Refuse rather than mislead. --probe measures the engine's uncertainty by sampling it
 	// twice; at temperature 0 the two passes are the same text by construction, so it would
 	// report "nothing disagreed" and mean nothing by it. Guarded on the EFFECTIVE temperature
@@ -326,7 +350,9 @@ if (escalateTo) {
 		);
 		process.exit(1);
 	}
-	console.log(`Translating ${cfg.sourceLanguage} -> ${cfg.targets.join(", ")} via ${cfg.engine} (${profile.model})`);
+	// paths.sourceLanguage, not cfg.sourceLanguage: a `source`-shaped config carries the language
+	// in the FILENAME and has no such field, so reading cfg printed "Translating undefined -> es".
+	console.log(`Translating ${paths.sourceLanguage} -> ${cfg.targets.join(", ")} via ${cfg.engine} (${profile.model})`);
 	const started = Date.now();
 	for (const lang of cfg.targets) {
 		await translateInto(lang, src, profile, { force });
@@ -365,6 +391,69 @@ if (escalateTo) {
 }
 if (hardFailures) process.exitCode = 1;
 
+// ── the confirmation pass — resolve the findings a string comparison cannot ─────────────
+//
+// Runs only after a real translate, never under --check-only, and only over the keys that came
+// back identical. Everything the model changed is proven translatable and is not asked about.
+if (!checkOnly && !noConfirm && !acceptKeys.length && !escalateTo && translateProfile) {
+	for (const lang of cfg.targets) {
+		const outPath = paths.targetFile(lang);
+		if (!existsSync(outPath)) continue;
+		const dst = flatten(JSON.parse(readFileSync(outPath, "utf8")));
+		// The candidates are the LIVE findings only: a key a human already signed off is never
+		// re-asked, and neither is one whose proposal is still current.
+		const { findings } = allFindings(lang, dst);
+		const keys = findings.filter((f) => f.code === CONFIRM_CODE).map((f) => f.key);
+		if (!keys.length) continue;
+
+		console.log(`\n${lang}: confirming ${keys.length} identical key(s) with ${cfg.engine}`);
+		const { cleared, proposed, failed: confirmFailed } = await confirmIdentical({
+			keys,
+			sourceFlat: src,
+			targetFlat: dst,
+			profile: translateProfile,
+			targetLang: lang,
+			context: cfg.context,
+			doNotTranslate: cfg.glossary?.doNotTranslate ?? [],
+		});
+
+		// BOTH outcomes are annotations, written to this project's state file. NEITHER is a
+		// verdict: the engine never writes `<lang>.accepted.json`, because that file is the
+		// human record and it is what makes a check pass. A "same" verdict pre-ticks the row in
+		// the review page so 70 keys are one click instead of seventy; a human's approval is
+		// still what records it.
+		const by = `${cfg.engine} (${translateProfile.model})`;
+		for (const c of cleared) {
+			putConfirmation(confirmStore, {
+				lang,
+				key: c.key,
+				hash: acceptanceHash({ key: c.key, code: CONFIRM_CODE, src: c.src, dst: c.dst }),
+				verdict: "same",
+				engine: by,
+			});
+		}
+		for (const p of proposed) {
+			putConfirmation(confirmStore, {
+				lang,
+				key: p.key,
+				hash: acceptanceHash({ key: p.key, code: CONFIRM_CODE, src: p.src, dst: p.dst }),
+				verdict: "translate",
+				suggestion: p.suggestion,
+				engine: by,
+			});
+		}
+
+		console.log(`  ${cleared.length} look correct as-is — approve them in the review page (nothing was signed off for you)`);
+		if (proposed.length) {
+			console.log(`  ${proposed.length} look SKIPPED. Suggestions, NOT applied:`);
+			for (const p of proposed) console.log(`      ${p.key}  ${JSON.stringify(p.src)} -> ${JSON.stringify(p.suggestion)}`);
+		}
+		if (confirmFailed.length) {
+			console.log(`  ${confirmFailed.length} could not be checked (engine error) — left as findings`);
+		}
+	}
+}
+
 // ── post-checks — verify the FILES that were written, not the run that wrote them ──────
 let failed = 0;
 for (const lang of cfg.targets) {
@@ -388,7 +477,23 @@ for (const lang of cfg.targets) {
 		if (code !== "disagreement") failed += list.length;
 		const keys = list.map((f) => f.key);
 		const note = code === "disagreement" ? " [advisory — review or escalate]" : "";
-		console.log(`  ${code} (${list.length})${note}: ${keys.slice(0, 8).join(", ")}${keys.length > 8 ? " …" : ""}`);
+		console.log(`  ${code} (${list.length})${note}:`);
+		// EVERY name, wrapped — never a truncated head with an ellipsis. The only tool for
+		// clearing a finding is `--accept <key>`, so a report that printed 8 of 67 names and
+		// hid the rest was asking for exactly the information it had just withheld.
+		let line = "   ";
+		for (const k of keys) {
+			if (line.length + k.length + 2 > 100) {
+				console.log(line);
+				line = "   ";
+			}
+			line += ` ${k},`;
+		}
+		if (line.trim()) console.log(line.replace(/,$/, ""));
+		// A live suggestion from the confirmation pass, shown next to the key it belongs to.
+		for (const f of list) {
+			if (f.suggestion) console.log(`      ${f.key}: suggested ${JSON.stringify(f.suggestion)} (not applied)`);
+		}
 	}
 	if (!findings.length) console.log("  all checks passed");
 	// ALWAYS printed, even at zero. Suppression you cannot see is the bug this project exists

@@ -8,10 +8,10 @@
     "just-ai-help": "./server/translate.js"
   },
   "scripts": {
-    "init": "node server/init.js",
+    "start": "node server/review.js",
     "translate": "node server/translate.js",
+    "check": "node server/translate.js",
     "extract": "node server/extract.js",
-    "review": "node server/review.js",
     "test": "node --test",
     "install:client": "npm --prefix client install",
     "dev": "npm --prefix client run dev",

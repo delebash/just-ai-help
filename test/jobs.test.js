@@ -13,12 +13,12 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { openDb, seedProviders, DB_FILE } from "../server/db.js";
+import { openProject } from "../server/state.js";
 import { JobManager } from "../server/jobs.js";
-import { proposals, proposalCount, runHistory } from "../server/store.js";
+import { proposals, proposalCount, runHistory } from "../server/state.js";
 
 const tmp = () => mkdtempSync(join(tmpdir(), "jah-jobs-"));
-const fresh = () => openDb(join(tmp(), DB_FILE));
+const fresh = () => openProject(tmp());
 
 const SUBSET = { "a.one": "One", "a.two": "Two", "a.three": "Three" };
 
@@ -53,7 +53,7 @@ const startJob = (jm, over = {}) =>
 	});
 
 test("start returns immediately with a job id — a 52-minute run is not a request", () => {
-	const jm = new JobManager({ db: fresh() });
+	const jm = new JobManager({ store: fresh() });
 	const s = startJob(jm);
 	assert.ok(s.id);
 	assert.equal(s.state, "running");
@@ -67,7 +67,7 @@ test("A JOB WRITES ONLY PROPOSALS — the locale file is untouched", async () =>
 	writeFileSync(locale, before);
 
 	const db = fresh();
-	const jm = new JobManager({ db });
+	const jm = new JobManager({ store: db });
 	startJob(jm);
 	await jm.settled();
 
@@ -77,7 +77,7 @@ test("A JOB WRITES ONLY PROPOSALS — the locale file is untouched", async () =>
 
 test("results are staged as they arrive, so review can start before the run ends", async () => {
 	const db = fresh();
-	const jm = new JobManager({ db });
+	const jm = new JobManager({ store: db });
 	const seen = [];
 	jm.subscribe((e) => e.type === "item" && seen.push(e.key));
 	startJob(jm);
@@ -87,7 +87,7 @@ test("results are staged as they arrive, so review can start before the run ends
 });
 
 test("A SECOND START IS REFUSED — two runs would silently eat each other's work", () => {
-	const jm = new JobManager({ db: fresh() });
+	const jm = new JobManager({ store: fresh() });
 	startJob(jm);
 	assert.throws(() => startJob(jm), /already running/);
 	try {
@@ -98,7 +98,7 @@ test("A SECOND START IS REFUSED — two runs would silently eat each other's wor
 });
 
 test("a finished job releases the slot", async () => {
-	const jm = new JobManager({ db: fresh() });
+	const jm = new JobManager({ store: fresh() });
 	startJob(jm);
 	await jm.settled();
 	assert.equal(jm.busy, false);
@@ -107,7 +107,7 @@ test("a finished job releases the slot", async () => {
 
 test("CANCELLING KEEPS WHAT WAS ALREADY STAGED", async () => {
 	const db = fresh();
-	const jm = new JobManager({ db });
+	const jm = new JobManager({ store: db });
 	// Cancel the moment the first batch lands, so the second never runs.
 	jm.subscribe((e) => {
 		if (e.type === "progress") jm.cancel();
@@ -120,7 +120,7 @@ test("CANCELLING KEEPS WHAT WAS ALREADY STAGED", async () => {
 });
 
 test("progress is reported against a known total", async () => {
-	const jm = new JobManager({ db: fresh() });
+	const jm = new JobManager({ store: fresh() });
 	const ticks = [];
 	jm.subscribe((e) => e.type === "progress" && ticks.push(`${e.done}/${e.total}`));
 	startJob(jm);
@@ -129,7 +129,7 @@ test("progress is reported against a known total", async () => {
 });
 
 test("a failing engine ends the job as FAILED and says why — never as a quiet success", async () => {
-	const jm = new JobManager({ db: fresh() });
+	const jm = new JobManager({ store: fresh() });
 	const errors = [];
 	jm.subscribe((e) => e.type === "error" && errors.push(e.message));
 	startJob(jm, { translate: fakeTranslate({ throws: "engine unreachable" }) });
@@ -141,7 +141,7 @@ test("a failing engine ends the job as FAILED and says why — never as a quiet 
 });
 
 test("keys the engine could not deliver are NAMED, not swallowed", async () => {
-	const jm = new JobManager({ db: fresh() });
+	const jm = new JobManager({ store: fresh() });
 	startJob(jm, {
 		translate: async ({ onBatch }) => {
 			onBatch?.({ "a.one": "Uno" });
@@ -153,7 +153,7 @@ test("keys the engine could not deliver are NAMED, not swallowed", async () => {
 });
 
 test("A RELOADED PAGE CAN REJOIN — status survives the browser, not the process", async () => {
-	const jm = new JobManager({ db: fresh() });
+	const jm = new JobManager({ store: fresh() });
 	const started = startJob(jm);
 	const rejoined = jm.status();
 	assert.equal(rejoined.id, started.id);
@@ -163,7 +163,7 @@ test("A RELOADED PAGE CAN REJOIN — status survives the browser, not the proces
 });
 
 test("status never leaks the AbortController or the promise", () => {
-	const jm = new JobManager({ db: fresh() });
+	const jm = new JobManager({ store: fresh() });
 	const s = startJob(jm);
 	assert.ok(!("controller" in s));
 	assert.ok(!("promise" in s));
@@ -171,7 +171,7 @@ test("status never leaks the AbortController or the promise", () => {
 
 test("run history records what happened, which was previously thrown away", async () => {
 	const db = fresh();
-	const jm = new JobManager({ db });
+	const jm = new JobManager({ store: db });
 	startJob(jm);
 	await jm.settled();
 
@@ -184,7 +184,7 @@ test("run history records what happened, which was previously thrown away", asyn
 });
 
 test("subscribers can unsubscribe without breaking the run", async () => {
-	const jm = new JobManager({ db: fresh() });
+	const jm = new JobManager({ store: fresh() });
 	let n = 0;
 	const off = jm.subscribe(() => n++);
 	startJob(jm);

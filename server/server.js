@@ -10,18 +10,32 @@
 //   locale JSON     only ever written by an explicit human action in here
 //   accepted.json   accept / unaccept
 //   notes.json      the per-key note that feeds the next translation
-//   .jah.db         everything else: progress, undo, proposals, runs, connections
+//   .jah-state.json  this project: progress, undo, proposals, confirmations, runs
+//   settings.json    YOURS, in the TOOL folder: connections, keys, your name
 //
 // A job never writes a locale file. Engine output is staged and applied by a person. Deleting
-// the database must not break a build, and there is a test.
+// the state file must not break a check, and there is a test.
 
 import { createServer as httpServer } from "node:http";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
 import { acceptanceEntry, acceptanceHash, loadAccepted, partitionAccepted, saveAccepted } from "./accepted.js";
 import { buildContext, checkOne, runChecks } from "./checks.js";
-import { DB_FILE, assertGitignored, listConnections, listProviders, openProject, readConnection, resolveConnection, saveConnection } from "./db.js";
+import { attachConfirmations } from "./confirm.js";
+import {
+	TOOL_ROOT,
+	assertGitignored,
+	getReviewer,
+	listConnections,
+	listProviders,
+	openSettings,
+	readConnection,
+	resolveConnection,
+	saveConnection,
+	setReviewer,
+} from "./settings.js";
 import { applyConfigOverrides, profileProblem } from "./engine.js";
+import { defaultEngine, gitignoreLines, planInit, writeInit } from "./init.js";
 import { inferConfig } from "./infer.js";
 import { flatten, rebuild } from "./jsonutil.js";
 import { projectPaths } from "./paths.js";
@@ -41,9 +55,12 @@ import {
 	recordAction,
 	reviewProgress,
 	reviewStatuses,
+	confirmations,
+	dropConfirmation,
+	openProject,
 	runHistory,
 	setReviewStatus,
-} from "./store.js";
+} from "./state.js";
 import { rankSuspects } from "./suspects.js";
 import { checkKeyTerms, checkTerms, termUsage } from "./terms.js";
 
@@ -98,7 +115,20 @@ const gtFrame = (text, tl) => `<!doctype html>
  * A factory rather than module state, so tests can point it at a temp directory and pick a
  * port. An untestable server is how the save path silently stops preserving structure.
  */
-export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}) {
+
+/**
+ * Everything derived from ONE project's config: its paths, its state, its routes.
+ *
+ * Split out so the server can START WITHOUT A CONFIG — the setup screen has to be reachable
+ * before one exists. Routes dispatch through a lookup table, so an unloaded project is one
+ * guard rather than a change to every handler.
+ *
+ * Called again when setup writes a config, which is how the page goes live without a restart.
+ * Loading REPLACES the project wholesale; there is no swap-while-running path, because a
+ * half-swapped project with a job in flight is a bug waiting to be written.
+ */
+function loadProject({ configPath, store: injectedStore, settings, settingsRoot }) {
+
 	const rawCfg = JSON.parse(readFileSync(configPath, "utf8"));
 
 	// Every path from one place, anchored to the config file. This line used to be
@@ -111,8 +141,12 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 	const conventions = JSON.parse(readFileSync(new URL("./config/conventions.json", import.meta.url), "utf8"));
 	const langs = rawCfg.targets ?? [];
 
-	const db = injectedDb ?? openProject(projectRoot);
-	const jobs = new JobManager({ db });
+	// TWO handles, two scopes. `store` is this PROJECT's workshop state and lives beside its
+	// config. `settings` is YOURS — engine connections, keys, your name — and lives in the tool's
+	// own folder, because you install the tool once and point it at many apps. Storing a
+	// connection per-project meant re-entering the same key for every app you translate.
+	const store = injectedStore ?? openProject(projectRoot);
+	const jobs = new JobManager({ store });
 
 	const sourceFile = paths.sourceFile;
 	// Inference needs the source strings, so it happens after the file is locatable. An
@@ -162,7 +196,13 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 			}
 		}
 		// Cached second opinions were about the old text.
-		dropReferences(db, { lang, key });
+		dropReferences(store, { lang, key });
+		// So was a staged proposal, and so was the engine's confirmation verdict. Dropping the
+		// probe entry and the cached reading but NOT these was a real bug: a proposal staged
+		// against the old string survived an edit and could then be applied OVER the newer text,
+		// silently reverting a reviewer's own fix.
+		dropProposal(store, { lang, key });
+		dropConfirmation(store, { lang, key });
 	}
 
 	/**
@@ -208,6 +248,12 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 
 		all.push(...termFindings(lang, sourceFlat, targetFlat));
 
+		// The confirmation pass's annotation, hung on the finding it belongs to. BOTH doors must do
+		// this or the workspace shows a bare "identical to the source" while the terminal shows
+		// "…and it should be Guardar" — the same two-answers-for-one-question drift that
+		// server/engine.js exists to prevent. Reads state; calls no engine.
+		all = attachConfirmations(all, confirmations(store, lang), sourceFlat, targetFlat);
+
 		const split = partitionAccepted(all, loadAccepted(fileFor(lang, "accepted")), sourceFlat, targetFlat);
 		return { sourceFlat, targetFlat, findings: split.findings, accepted: split.accepted };
 	}
@@ -222,14 +268,17 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 		for (const l of wanted) {
 			const { sourceFlat, targetFlat, findings, accepted: acc } = findingsFor(l);
 			accepted += acc.length;
-			const statuses = reviewStatuses(db, l);
+			const statuses = reviewStatuses(store, l);
 			const notes = flatten(readNotes(l));
-			const staged = proposalKeys(db, l); // one query, not one per row
+			const staged = proposalKeys(store, l); // one query, not one per row
 
 			const byKey = new Map();
 			for (const f of findings) {
 				if (!byKey.has(f.key)) byKey.set(f.key, []);
-				byKey.get(f.key).push({ code: f.code, detail: f.detail, advisory: !!f.advisory });
+				// `suggestion` is the confirmation pass's answer for an `untranslated` flag — what
+				// the engine would have written, never applied. Distinct from the row's
+				// `hasProposal`, which means "a re-translation is staged in the database".
+				byKey.get(f.key).push({ code: f.code, detail: f.detail, advisory: !!f.advisory, suggestion: f.suggestion, confirmed: f.confirmed, confirmedBy: f.confirmedBy });
 				counts[f.code] = (counts[f.code] ?? 0) + 1;
 			}
 
@@ -265,16 +314,16 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 			langs,
 			source: cfg.sourceLanguage,
 			job: jobs.status(),
-			progress: Object.fromEntries(langs.map((l) => [l, reviewProgress(db, l)])),
-			proposals: Object.fromEntries(langs.map((l) => [l, proposalCount(db, l)])),
+			progress: Object.fromEntries(langs.map((l) => [l, reviewProgress(store, l)])),
+			proposals: Object.fromEntries(langs.map((l) => [l, proposalCount(store, l)])),
 		}),
 
 		"GET /api/rows": (_b, url) => buildRows({ lang: url.searchParams.get("lang") || null }),
 
 		"GET /api/accepted": (_b, url) => {
 			const lang = url.searchParams.get("lang") || langs[0];
-			const store = loadAccepted(fileFor(lang, "accepted"));
-			return { lang, entries: Object.entries(store).map(([hash, e]) => ({ hash, ...e })) };
+			const accepted = loadAccepted(fileFor(lang, "accepted"));
+			return { lang, entries: Object.entries(accepted).map(([hash, e]) => ({ hash, ...e })) };
 		},
 
 		"POST /api/save": (b) => {
@@ -285,34 +334,63 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 
 			const prev = readTargetFlat(lang)[key] ?? null;
 			writeKey(lang, key, value);
-			recordAction(db, { lang, key, kind: "edit", prev, next: value });
-			setReviewStatus(db, { lang, key, status: "reviewed" });
+			recordAction(store, { lang, key, kind: "edit", prev, next: value });
+			setReviewStatus(store, { lang, key, status: "reviewed" });
 
 			const flags = checkOne({ key, src: sourceFlat[key], dst: value, ctx: context(lang) }).map((f) => ({ code: f.code, detail: f.detail }));
 			return { key, lang, flags };
 		},
 
+		/**
+		 * Records findings as reviewed-and-correct. Takes `keys[]`, or `key` for one.
+		 *
+		 * BULK IS THE POINT, not a convenience. A fresh catalogue raises ~70 `untranslated`
+		 * findings that are almost all correct output — glyphs, brand names, words the target
+		 * language shares. Seventy clicks is what makes someone reach for a script instead;
+		 * making the honest path cheap is what stops that.
+		 *
+		 * ONE CALL IS ONE UNDO. The whole batch records a single `bulk-accept` action holding
+		 * every hash it added, so undo reverses the click a person actually made rather than
+		 * making them press `u` seventy times.
+		 *
+		 * `by` comes from YOUR settings, asked for once. Never the OS username, never git — an
+		 * automated run under your account would inherit the name and become indistinguishable
+		 * from your own judgement, which is the exact failure the field exists to expose.
+		 */
 		"POST /api/accept": (b) => {
-			const { lang, key } = b ?? {};
-			if (typeof lang !== "string" || typeof key !== "string") return { _code: 400, error: "lang and key must be strings" };
+			const { lang, key, keys } = b ?? {};
+			const list = Array.isArray(keys) ? keys : key !== undefined ? [key] : null;
+			if (typeof lang !== "string" || !list || !list.length || list.some((k) => typeof k !== "string")) {
+				return { _code: 400, error: "lang and keys[] (or key) must be strings" };
+			}
 			const sourceFlat = flatten(readSourceRaw());
-			if (!(key in sourceFlat)) return { _code: 404, error: `no such key: ${key}` };
+			const missing = list.filter((k) => !(k in sourceFlat));
+			if (missing.length) return { _code: 404, error: `no such key: ${missing.join(", ")}` };
 
 			const targetFlat = readTargetFlat(lang);
-			const raw = runChecks({ sourceFlat, targetFlat, ctx: context(lang) }).filter((f) => f.key === key);
+			const wanted = new Set(list);
+			// Re-run the checks WITHOUT the acceptance filter: accepting is about what the checks
+			// currently say, and filtering first would make a second accept on the same key a
+			// no-op that looks like success.
+			const raw = runChecks({ sourceFlat, targetFlat, ctx: context(lang) }).filter((f) => wanted.has(f.key));
 			const path = fileFor(lang, "accepted");
-			const store = loadAccepted(path);
+			const accepted = loadAccepted(path);
+			const by = getReviewer(settings) ?? undefined;
 			const added = [];
 			for (const f of raw) {
-				const entry = acceptanceEntry({ key: f.key, code: f.code, src: sourceFlat[f.key] ?? "", dst: targetFlat[f.key] ?? "" });
+				const entry = acceptanceEntry({ key: f.key, code: f.code, src: sourceFlat[f.key] ?? "", dst: targetFlat[f.key] ?? "", by });
 				const h = acceptanceHash(entry);
-				if (!store[h]) added.push(h);
-				store[h] = entry;
+				if (!accepted[h]) added.push(h);
+				accepted[h] = entry;
 			}
-			saveAccepted(path, store);
-			recordAction(db, { lang, key, kind: "accept", prev: added, next: null });
-			setReviewStatus(db, { lang, key, status: "reviewed" });
-			return { key, lang, recorded: added.length };
+			saveAccepted(path, accepted);
+
+			const bulk = list.length > 1;
+			recordAction(store, { lang, key: bulk ? null : list[0], kind: bulk ? "bulk-accept" : "accept", prev: added, next: bulk ? list : null });
+			for (const k of list) setReviewStatus(store, { lang, key: k, status: "reviewed" });
+			// A machine's opinion has served its purpose once a human has ruled on the key.
+			for (const k of list) dropConfirmation(store, { lang, key: k });
+			return { lang, keys: list, recorded: added.length, by: by ?? null };
 		},
 
 		// The fix for the complaint that started this rebuild. An acceptance was one-way, and
@@ -322,30 +400,33 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 			const { lang, key, code = null } = b ?? {};
 			if (typeof lang !== "string" || typeof key !== "string") return { _code: 400, error: "lang and key must be strings" };
 			const path = fileFor(lang, "accepted");
-			const store = loadAccepted(path);
+			const accepted = loadAccepted(path);
 			const removed = {};
-			for (const [h, e] of Object.entries(store)) {
+			for (const [h, e] of Object.entries(accepted)) {
 				if (e.key === key && (code === null || e.code === code)) {
 					removed[h] = e;
-					delete store[h];
+					delete accepted[h];
 				}
 			}
-			saveAccepted(path, store);
-			recordAction(db, { lang, key, kind: "unaccept", prev: removed, next: null });
+			saveAccepted(path, accepted);
+			recordAction(store, { lang, key, kind: "unaccept", prev: removed, next: null });
 			return { key, lang, removed: Object.keys(removed).length };
 		},
 
 		"POST /api/undo": (b) => {
-			const a = popAction(db, { lang: b?.lang ?? null });
+			const a = popAction(store, { lang: b?.lang ?? null });
 			if (!a) return { _code: 404, error: "nothing to undo" };
 			if (a.kind === "edit") {
 				// null, not "" — see writeKey. A key that had no translation goes back to none.
 				writeKey(a.lang, a.key, a.prev);
-			} else if (a.kind === "accept") {
+			} else if (a.kind === "accept" || a.kind === "bulk-accept") {
+				// Identical reversal for both: `prev` is the list of hashes THIS action added, so
+				// undoing a 70-key approval is one step and never touches an acceptance that was
+				// already there before the click.
 				const path = fileFor(a.lang, "accepted");
-				const store = loadAccepted(path);
-				for (const h of a.prev ?? []) delete store[h];
-				saveAccepted(path, store);
+				const accepted = loadAccepted(path);
+				for (const h of a.prev ?? []) delete accepted[h];
+				saveAccepted(path, accepted);
 			} else if (a.kind === "unaccept") {
 				const path = fileFor(a.lang, "accepted");
 				saveAccepted(path, { ...loadAccepted(path), ...(a.prev ?? {}) });
@@ -355,11 +436,11 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 			return { undone: a };
 		},
 
-		"GET /api/history": (_b, url) => ({ actions: actionHistory(db, { lang: url.searchParams.get("lang") || null }) }),
+		"GET /api/history": (_b, url) => ({ actions: actionHistory(store, { lang: url.searchParams.get("lang") || null }) }),
 
 		"GET /api/proposals": (_b, url) => {
 			const lang = url.searchParams.get("lang") || langs[0];
-			return { lang, proposals: proposals(db, { lang, key: url.searchParams.get("key") || null }) };
+			return { lang, proposals: proposals(store, { lang, key: url.searchParams.get("key") || null }) };
 		},
 
 		"POST /api/proposals/apply": (b) => {
@@ -367,12 +448,12 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 			if (typeof lang !== "string" || !Array.isArray(keys)) return { _code: 400, error: "lang and keys[] required" };
 			const applied = [];
 			for (const key of keys) {
-				const [p] = proposals(db, { lang, key });
+				const [p] = proposals(store, { lang, key });
 				if (!p) continue;
 				const prev = readTargetFlat(lang)[key] ?? null;
 				writeKey(lang, key, p.value);
-				recordAction(db, { lang, key, kind: "apply", prev, next: p.value });
-				dropProposal(db, { lang, key });
+				recordAction(store, { lang, key, kind: "apply", prev, next: p.value });
+				dropProposal(store, { lang, key });
 				applied.push(key);
 			}
 			return { lang, applied };
@@ -381,8 +462,8 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 		"DELETE /api/proposals": (b) => {
 			const { lang, keys = null } = b ?? {};
 			if (typeof lang !== "string") return { _code: 400, error: "lang required" };
-			if (keys === null) return { lang, discarded: dropAllProposals(db, lang) };
-			for (const key of keys) dropProposal(db, { lang, key });
+			if (keys === null) return { lang, discarded: dropAllProposals(store, lang) };
+			for (const key of keys) dropProposal(store, { lang, key });
 			return { lang, discarded: keys.length };
 		},
 
@@ -419,13 +500,23 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 			if (typeof lang !== "string" || typeof key !== "string") return { _code: 400, error: "lang and key required" };
 			const prev = flatten(readNotes(lang))[key] ?? null;
 			writeNote(lang, key, note || null);
-			recordAction(db, { lang, key, kind: "note", prev, next: note || null });
+			recordAction(store, { lang, key, kind: "note", prev, next: note || null });
 			return { lang, key, note: note || null };
 		},
 
+		// Your name, asked for once and kept in the TOOL's settings — so it is right for every
+		// app you point this at, and so an approval can say who made it.
+		"GET /api/reviewer": () => ({ reviewer: getReviewer(settings) }),
+
+		"PUT /api/reviewer": (b) => {
+			if (b?.reviewer !== null && typeof b?.reviewer !== "string") return { _code: 400, error: "reviewer must be a string or null" };
+			setReviewer(settings, b.reviewer);
+			return { reviewer: getReviewer(settings) };
+		},
+
 		"GET /api/engines": () => ({
-			providers: listProviders(db).map(({ help, ...p }) => ({ ...p, help })),
-			connections: listConnections(db),
+			providers: listProviders().map(({ help, ...p }) => ({ ...p, help })),
+			connections: listConnections(settings),
 		}),
 
 		"PUT /api/engines/connection": (b) => {
@@ -434,23 +525,23 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 			// Refuses BEFORE writing. "I assumed it was ignored" is how a key gets published.
 			if (apiKey) {
 				try {
-					assertGitignored(projectRoot, DB_FILE);
+					assertGitignored(settingsRoot);
 				} catch (e) {
 					return { _code: 400, error: e.message };
 				}
 			}
-			const newId = saveConnection(db, { id, label, provider, overrides, apiKey });
-			return readConnection(db, newId);
+			const newId = saveConnection(settings, { id, label, provider, overrides, apiKey });
+			return readConnection(settings, newId);
 		},
 
-		"GET /api/runs": (_b, url) => ({ runs: runHistory(db, { lang: url.searchParams.get("lang") || null }) }),
+		"GET /api/runs": (_b, url) => ({ runs: runHistory(store, { lang: url.searchParams.get("lang") || null }) }),
 
 		"GET /api/reference": (_b, url) => {
 			const lang = url.searchParams.get("lang") || langs[0];
 			const key = url.searchParams.get("key");
 			const engine = url.searchParams.get("engine") ?? "backtranslate";
 			if (!key) return { _code: 400, error: "key required" };
-			return { key, lang, engine, cached: getReference(db, { lang, key, engine }) };
+			return { key, lang, engine, cached: getReference(store, { lang, key, engine }) };
 		},
 
 		"GET /api/jobs/current": () => ({ job: jobs.status() }),
@@ -467,19 +558,213 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 		writeFileSync(
 			path,
 			`${JSON.stringify(
-				{
-					_why: "Per-key context for the translator, written during review. Injected into the prompt on the next translation of that key, so a fix compounds instead of recurring.",
-					...sorted,
-				},
+				sorted,
 				null,
 				2,
 			)}\n`,
 		);
 	}
 
+	/** Resolves a scope into a key subset and hands it to the job manager. */
+	/** The only scopes a run may have. Anything else is a typo, and a typo must not start a job. */
+	const SCOPES = new Set(["flagged", "unsure", "all", "keys"]);
+
+	function startJob(b, res) {
+		const { lang, connectionId = null, engine = null, scope = "flagged", keys = null } = b;
+		if (!langs.includes(lang)) return json(res, 400, { error: `unknown language: ${lang}` });
+		// Found by driving the real catalogue: an unrecognised scope fell through to the
+		// flagged branch and started a 154-key run. A 52-minute job must never begin on a scope
+		// the caller did not ask for, so an unknown one is refused rather than interpreted.
+		if (!SCOPES.has(scope)) return json(res, 400, { error: `unknown scope: ${scope}. Use one of ${[...SCOPES].join(", ")}` });
+
+		// THE FIX for the two-resolver bug. This used to be the bare connection, so cfg.model,
+		// cfg.url, cfg.think and cfg.profile appeared ZERO times in the job path: an override
+		// set in the project config worked from the CLI and was silently ignored when you
+		// pressed re-translate in this workspace. Same tool, same config, two answers.
+		const base = connectionId ? resolveConnection(settings, connectionId) : null;
+		if (connectionId && !base) return json(res, 404, { error: `no such connection: ${connectionId}` });
+		const profile = base ? applyConfigOverrides(base, cfg) : null;
+		const problem = profile ? profileProblem(profile, { name: engine ?? "connection" }) : null;
+		if (problem) return json(res, 400, { error: problem });
+
+		const sourceFlat = flatten(readSourceRaw());
+		let wanted;
+		if (scope === "keys") wanted = keys ?? [];
+		else if (scope === "all") wanted = Object.keys(sourceFlat);
+		else {
+			const { findings } = findingsFor(lang);
+			const flagged = new Set(findings.filter((f) => scope !== "unsure" || f.code === "disagreement").map((f) => f.key));
+			wanted = [...flagged];
+		}
+		const subset = Object.fromEntries(wanted.filter((k) => k in sourceFlat).map((k) => [k, sourceFlat[k]]));
+		if (!Object.keys(subset).length) return json(res, 400, { error: "that scope selected no keys" });
+
+		try {
+			const status = jobs.start({
+				lang,
+				engine: engine ?? profile?.model ?? "engine",
+				profile,
+				scope,
+				subset,
+				// notes MUST be here. Without them the note a reviewer writes on a key is not sent
+				// when they press re-translate on that same key — which is the one place it matters.
+				cfg: { ...cfg, conventionsLine: conventions[lang]?.promptLine ?? "", notes: flatten(readNotes(lang)) },
+				cachePath: paths.cachePath,
+			});
+			return json(res, 202, { job: status });
+		} catch (e) {
+			return json(res, e.code === "JOB_BUSY" ? 409 : 500, { error: e.message });
+		}
+	}
+
+	return {
+		configPath, rawCfg, cfg, paths, projectRoot, localesDir, conventions, langs,
+		store, jobs, sourceFile, fileFor, readSourceRaw, readTargetFlat, readNotes,
+		context, writeKey, writeNote, findingsFor, buildRows, routes, startJob,
+	};
+}
+
+export function createWorkspaceServer({ configPath = null, uiDir, store: injectedStore, settingsRoot = TOOL_ROOT } = {}) {
+	// Available with no project open — the setup page needs the engine list, and connections are
+	// tool-level so they survive pointing at a different app. `settingsRoot` is a parameter, not
+	// a constant, so a test can never reach the real settings file.
+	const settings = openSettings(settingsRoot);
+	let project = configPath ? loadProject({ configPath, store: injectedStore, settings, settingsRoot }) : null;
+
+	/**
+	 * Setup — the routes that work with NO project loaded.
+	 *
+	 * WHY A PATH BOX AND NOT A FILE PICKER. A browser file input hands JavaScript a File object
+	 * and never a filesystem path, so a real "Browse…" means the server exposing a directory
+	 * listing API over localhost. That is a filesystem-read surface nothing else in this tool
+	 * has, to save typing a path once per project. You paste it, and the server says immediately
+	 * what it found — which is the part that actually prevents mistakes.
+	 */
+	const setupRoutes = {
+		"GET /api/setup/state": () => ({
+			loaded: !!project,
+			configPath: project?.configPath ?? null,
+			source: project?.paths.sourceFile ?? null,
+			langs: project?.langs ?? [],
+			reviewer: getReviewer(settings),
+			// Offered here as well as in the review screen: choosing an engine is part of setting
+			// a project up, and sending you to another tab for it is how a "setup" page ends up
+			// doing half the job.
+			providers: listProviders().map(({ help, ...p }) => ({ ...p, help })),
+			connections: listConnections(settings),
+			defaultEngine: defaultEngine(),
+			// Codes only. The display name is derived in the browser from Intl.DisplayNames, so the
+			// menu reads in the user's own language and no English name can go stale here.
+			languages: JSON.parse(readFileSync(new URL("./config/languages.json", import.meta.url), "utf8")),
+		}),
+
+		/**
+		 * Reads a candidate en.json and reports what it found. Writes NOTHING.
+		 *
+		 * This is the live validation behind the path box: key count, the placeholder syntax and
+		 * plural separator inferred from the strings themselves, the locale files sitting beside
+		 * it, and glossary candidates. Seeing that the tool understood your catalogue is what
+		 * proves the path is right before an hour of engine time proves it was not.
+		 */
+		"POST /api/setup/inspect": (b) => {
+			const path = String(b?.path ?? "").trim().replace(/^["']|["']$/g, "");
+			if (!path) return { _code: 400, error: "give me the path to your en.json" };
+			try {
+				const plan = planInit(path);
+				return {
+					ok: true,
+					source: plan.localesDir,
+					sourceLanguage: plan.sourceLanguage,
+					keyCount: plan.keyCount,
+					placeholder: plan.placeholder,
+					pluralSeparator: plan.pluralSeparator,
+					// Every locale file already sitting beside the source, with how much of the
+					// catalogue each one actually covers. NOT pre-selected: an existing file is a
+					// fact about the folder, not a decision about what to run.
+					locales: plan.existingTargets.map((code) => {
+						const target = join(plan.localesDir, `${code}.json`);
+						const flat = existsSync(target) ? flatten(JSON.parse(readFileSync(target, "utf8"))) : {};
+						const done = Object.keys(plan.sourceFlat).filter((k) => typeof flat[k] === "string" && flat[k] !== "").length;
+						return { code, done, total: plan.keyCount, missing: plan.keyCount - done };
+					}),
+					candidates: plan.candidates,
+					configPath: plan.configPath,
+					exists: existsSync(plan.configPath),
+					gitignore: gitignoreLines(),
+				};
+			} catch (e) {
+				// The message from planInit is already the useful one — "no such file", "holds no
+				// strings", "no package.json above …". Passing it through beats inventing a worse one.
+				return { _code: 400, error: e.message };
+			}
+		},
+
+		/**
+		 * Writes the config and LOADS it, so the page goes live without a restart.
+		 *
+		 * Editing an existing project comes through here too, and the merge is the important
+		 * part: whatever the file already had that this screen does not manage is preserved
+		 * byte-for-byte. The UI is a writer, never an owner — a field added by hand or by a
+		 * future version must survive a save it knows nothing about.
+		 */
+		"POST /api/setup/save": (b) => {
+			const path = String(b?.path ?? "").trim().replace(/^["']|["']$/g, "");
+			if (!path) return { _code: 400, error: "give me the path to your en.json" };
+			let plan;
+			try {
+				plan = planInit(path, {
+					targets: Array.isArray(b?.targets) ? b.targets : undefined,
+					context: typeof b?.context === "string" ? b.context : undefined,
+					glossary: Array.isArray(b?.glossary) ? b.glossary : undefined,
+					engine: typeof b?.engine === "string" && b.engine ? b.engine : undefined,
+				});
+			} catch (e) {
+				return { _code: 400, error: e.message };
+			}
+			const existing = existsSync(plan.configPath) ? JSON.parse(readFileSync(plan.configPath, "utf8")) : {};
+			writeInit({ ...plan, cfg: { ...existing, ...plan.cfg } }, { force: true });
+			project = loadProject({ configPath: plan.configPath, settings, settingsRoot });
+			return { ok: true, configPath: plan.configPath, langs: project.langs };
+		},
+
+		"PUT /api/setup/reviewer": (b) => {
+			if (b?.reviewer !== null && typeof b?.reviewer !== "string") return { _code: 400, error: "reviewer must be a string or null" };
+			setReviewer(settings, b.reviewer);
+			return { reviewer: getReviewer(settings) };
+		},
+	};
+
 	const server = httpServer(async (req, res) => {
 		const url = new URL(req.url, "http://localhost");
 		const route = `${req.method} ${url.pathname}`;
+
+		// Setup runs with NO project — it is the screen that CREATES one.
+		if (url.pathname.startsWith("/api/setup/")) {
+			const h = setupRoutes[route];
+			if (!h) return json(res, 404, { error: "not found" });
+			const b = req.method === "GET" ? null : await body(req);
+			if (req.method !== "GET" && b === null) return json(res, 400, { error: "bad JSON" });
+			try {
+				const out = await h(b, url);
+				const code = out?._code ?? 200;
+				if (out && "_code" in out) delete out._code;
+				return json(res, code, out);
+			} catch (e) {
+				return json(res, 500, { error: e.message });
+			}
+		}
+
+		// Everything else needs a project. ONE guard, not a change to every handler, because
+		// routes dispatch through a lookup table. The static UI below is deliberately STILL
+		// served without one, so the setup page can load and say there is nothing pointed at
+		// yet — a tool that needs a config to reach the screen that writes a config is exactly
+		// what this split exists to fix.
+		if (url.pathname.startsWith("/api/") && !project) {
+			return json(res, 409, { error: "no project loaded yet", needsSetup: true });
+		}
+		// One destructure keeps every handler below written against bare names, which is why
+		// extracting loadProject moved ~440 lines without touching the 97 references in them.
+		const { cfg, store, jobs, langs, routes, writeNote, startJob, readTargetFlat, readSourceRaw, context, writeKey, fileFor, paths, buildRows, findingsFor, localesDir, conventions } = project ?? {};
 
 		// The Google Translate frame — our own page, so the parent can read the result back.
 		if (url.pathname === "/gt-frame") {
@@ -516,10 +801,10 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 			const dst = readTargetFlat(lang)[key];
 			if (!dst) return json(res, 404, { error: `no translation for ${key}` });
 
-			const cached = getReference(db, { lang, key, engine: "backtranslate" });
+			const cached = getReference(store, { lang, key, engine: "backtranslate" });
 			if (cached) return json(res, 200, { key, lang, english: cached.value, cached: true });
 
-			const base = connectionId ? resolveConnection(db, connectionId) : null;
+			const base = connectionId ? resolveConnection(settings, connectionId) : null;
 			if (!base) return json(res, 400, { error: "no engine connection selected" });
 			// Same merge as the job path — a back-translation must run on the engine the project
 			// config actually describes, or a second opinion is a second opinion about nothing.
@@ -532,7 +817,7 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 				const out = await callModel({ profile, system, user: `Translate items: ${JSON.stringify([{ id: 0, text: dst }])}` });
 				const english = parseItems(out).get(0);
 				if (!english) return json(res, 502, { error: "the engine returned nothing usable" });
-				putReference(db, { lang, key, engine: "backtranslate", value: english });
+				putReference(store, { lang, key, engine: "backtranslate", value: english });
 				return json(res, 200, { key, lang, english, cached: false });
 			} catch (e) {
 				// A dead second opinion must never block reviewing.
@@ -547,7 +832,9 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 			return startJob(b, res);
 		}
 
-		const handler = routes[route];
+		// `routes?.` — with no project there is no route table, and `GET /` reaches here: the guard
+		// above refuses only `/api/` paths, so the static UI is still served and can show setup.
+		const handler = routes?.[route];
 		if (handler) {
 			const b = req.method === "GET" ? null : await body(req);
 			if (req.method !== "GET" && b === null) return json(res, 400, { error: "bad JSON" });
@@ -562,76 +849,31 @@ export function createWorkspaceServer({ configPath, uiDir, db: injectedDb } = {}
 		}
 
 		// Static UI, when one is built.
+		//
+		// `no-store` MATTERS. The build emits fixed names — `app.js`, not `app.[hash].js` — so the
+		// COMMITTED dist does not churn a filename on every rebuild. The cost is that the URL never
+		// changes, so without this a browser serves a cached UI from before the last tool update.
+		// Localhost, ~220 KB, one reader: re-reading it every load is free. A stale UI is not.
 		if (uiDir && req.method === "GET") {
 			const rel = url.pathname === "/" ? "/index.html" : url.pathname;
 			const file = join(uiDir, rel.replace(/^\/+/, ""));
+			const headers = (type) => ({ "content-type": type, "cache-control": "no-store, must-revalidate" });
 			if (file.startsWith(uiDir) && existsSync(file)) {
-				res.writeHead(200, { "content-type": MIME[extname(file)] ?? "application/octet-stream" });
+				res.writeHead(200, headers(MIME[extname(file)] ?? "application/octet-stream"));
 				return res.end(readFileSync(file));
 			}
 			// SPA fallback so a deep link works.
 			const index = join(uiDir, "index.html");
 			if (existsSync(index)) {
-				res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+				res.writeHead(200, headers("text/html; charset=utf-8"));
 				return res.end(readFileSync(index));
 			}
 		}
 
 		json(res, 404, { error: "not found" });
 	});
-
-	/** Resolves a scope into a key subset and hands it to the job manager. */
-	/** The only scopes a run may have. Anything else is a typo, and a typo must not start a job. */
-	const SCOPES = new Set(["flagged", "unsure", "all", "keys"]);
-
-	function startJob(b, res) {
-		const { lang, connectionId = null, engine = null, scope = "flagged", keys = null } = b;
-		if (!langs.includes(lang)) return json(res, 400, { error: `unknown language: ${lang}` });
-		// Found by driving the real catalogue: an unrecognised scope fell through to the
-		// flagged branch and started a 154-key run. A 52-minute job must never begin on a scope
-		// the caller did not ask for, so an unknown one is refused rather than interpreted.
-		if (!SCOPES.has(scope)) return json(res, 400, { error: `unknown scope: ${scope}. Use one of ${[...SCOPES].join(", ")}` });
-
-		// THE FIX for the two-resolver bug. This used to be the bare connection, so cfg.model,
-		// cfg.url, cfg.think and cfg.profile appeared ZERO times in the job path: an override
-		// set in the project config worked from the CLI and was silently ignored when you
-		// pressed re-translate in this workspace. Same tool, same config, two answers.
-		const base = connectionId ? resolveConnection(db, connectionId) : null;
-		if (connectionId && !base) return json(res, 404, { error: `no such connection: ${connectionId}` });
-		const profile = base ? applyConfigOverrides(base, cfg) : null;
-		const problem = profile ? profileProblem(profile, { name: engine ?? "connection" }) : null;
-		if (problem) return json(res, 400, { error: problem });
-
-		const sourceFlat = flatten(readSourceRaw());
-		let wanted;
-		if (scope === "keys") wanted = keys ?? [];
-		else if (scope === "all") wanted = Object.keys(sourceFlat);
-		else {
-			const { findings } = findingsFor(lang);
-			const flagged = new Set(findings.filter((f) => scope !== "unsure" || f.code === "disagreement").map((f) => f.key));
-			wanted = [...flagged];
-		}
-		const subset = Object.fromEntries(wanted.filter((k) => k in sourceFlat).map((k) => [k, sourceFlat[k]]));
-		if (!Object.keys(subset).length) return json(res, 400, { error: "that scope selected no keys" });
-
-		try {
-			const status = jobs.start({
-				lang,
-				engine: engine ?? profile?.model ?? "engine",
-				profile,
-				scope,
-				subset,
-				// notes MUST be here. Without them the note a reviewer writes on a key is not sent
-				// when they press re-translate on that same key — which is the one place it matters.
-				cfg: { ...cfg, conventionsLine: conventions[lang]?.promptLine ?? "", notes: flatten(readNotes(lang)) },
-				cachePath: paths.cachePath,
-			});
-			return json(res, 202, { job: status });
-		} catch (e) {
-			return json(res, e.code === "JOB_BUSY" ? 409 : 500, { error: e.message });
-		}
-	}
-
-	server.jah = { cfg, db, jobs, langs, localesDir, buildRows, findingsFor, writeKey, fileFor };
+	// The test/CLI handle. A getter so it follows a project loaded AFTER the server started —
+	// which is the normal case now that setup can create one.
+	Object.defineProperty(server, "jah", { get: () => (project ? { ...project, settings, reload: () => { project = loadProject({ configPath: project.configPath, settings }); } } : { settings, project: null }) });
 	return server;
 }
