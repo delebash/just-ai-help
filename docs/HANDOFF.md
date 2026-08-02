@@ -874,3 +874,37 @@ any-Python-app goal, not a courtesy; JustVoice converges fully (option 2).
    don't persist), decide local_managed vs the shared runner. UI design input needed.
 3. Everything in the earlier sections of this file (JW's ~54 identical-string findings,
    the ~134 probe disagreements, whether Spanish ships) — unchanged.
+
+## 2026-08-02 — the rewrite is functionally complete, and it ran LIVE
+
+`just_ai_i18n_docgen` went from bare scaffold to a working app in one arc
+(github.com/delebash/just_ai_i18n_docgen, all pushed):
+
+**Server: every layer of this Node repo, ported test-first — 119 tests.** shieldlib /
+loop / checks(12) / suspects / confirm / accepted / state / paths / infer / jsonio /
+terms / init / extract+frontmatter / service / jobs / workspace API / CLI. The measured
+provenance travelled with the code. The engine half is GONE by design: llm-runner's
+presets own provider+model+temperature (0.2 carried over as seeded DATA), and the probe
+guard reads the RESOLVED preset. Configs have NO engine field, ever.
+
+**Client: built entirely on @delebash/llm-ui**, including the new kit component this
+app caused: **UiMultiSelect** (reka Popover+Listbox, chips, filter — the
+target-languages picker, per the user's kit-first ruling). Setup / Review / Runs views,
+hash router, per-domain Pinia, the kit's origin-aware transport, dev proxy to :8742.
+Vite build clean; **the rendered page is UNVERIFIED — no browser was driven.**
+
+**The live E2E (this box, gemma-4-26B MoE via Ollama): the full arc proven.**
+6/6 keys in one request, 8.0s — placeholder restored, plural pipes kept, the opening ¿
+present, JustWrite shielded, the No→No cognate flagged, the LIVE confirmation pass
+said "correct as-is" (exit 1 — the engine never signs off), `accept --by danel` →
+**"all checks passed", exit 0**. Two defects only a live run could find, both fixed
+with regression tests: the CLI never booted the shared storage (every test had passed
+`send=` explicitly), and the app hand-forked the schema per provider — defeating the
+Ollama adapter's OWN response_format→format translation. Rule extracted: hand the
+adapters the OpenAI shape; they own the per-provider translation.
+
+**Still open:** Tauri sidecar wiring (`tauri.conf` untouched); LOOKING at the UI; the
+llm-runner RUNNER path (engine download + GGUF) from a fresh host — the E2E used the
+Ollama provider, so that specific claim stays unproven; JV part 3; and the decision
+this file exists to reach: when this Node repo gets archived. The rewrite now covers
+its whole surface except "look at the page first".
