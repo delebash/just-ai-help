@@ -825,3 +825,52 @@ carry measurements:
 - **JW's Spanish catalogue** now shows ~54 identical-string findings again, because the 58
   machine-written acceptances were deleted. They are unreviewed and need a human.
 - **The ~134 probe disagreements** in that catalogue, never triaged.
+
+---
+
+## 2026-08-01, later — llm-runner became the standard, and JV converged
+
+The rewrite's foundation work, done across three repos. Full rulings in the memory file
+`llm-runner-standard.md`; the short version:
+
+**The audit.** "Is llm-runner really drop-in for any Python app?" was tested in a clean venv
+rather than answered from docs. It was not: `sqlalchemy` was missing from `pyproject.toml`
+for the repo's whole life (both host apps declare it themselves, so the import resolved by
+host luck), the eager package `__init__`s made one missing dep take down 11,773 of 19,720
+lines, the standalone catalog answered `[]` indistinguishably from "unwired", the README
+told consumers to pin a tag that had never been cut, and `install_llm` — the headline entry
+point — had zero direct test coverage.
+
+**The rulings** (user's, explicit): `install_llm` + SQLAlchemy is THE standard for every
+family app; no JSON store backend, now or later; JSON stays only for what belongs to the
+TRANSLATED app (`config.json`, `accepted`, `notes`); the bare minimal call
+(`install_llm(app, engine=…, session_factory=…, data_dir=…)`) is a requirement for the
+any-Python-app goal, not a courtesy; JustVoice converges fully (option 2).
+
+**Landed and pushed:**
+- `just-llm-runner@f630703` — declare sqlalchemy, lazy inits, `catalogWired`, the
+  clean-install tripwire. `@bf060ca` — the minimal contract, `test_install_llm` (found a
+  real race: the backfill daemon thread silently rolled back seeds on single-connection
+  test DBs), check 3 ("the stranger's app", runs the bare call on declared deps only),
+  `check-consumers.py` (resolves every consumer import; found JV's break in one pass).
+  Tag `v0.1.0` cut and pushed — the ref the README always cited.
+- `JustVoice@14b3ea7` — part 1: the roles concept deleted (its server had been
+  UNIMPORTABLE since llm-runner's `7232214`; nobody noticed because no venv existed —
+  one was stood up, 383 tests now run). `@aa1363f` — part 2: `install_llm` adopted,
+  providers migrated settings→DB, registry boots from the DB, the dead runner mount is
+  live (`catalogWired: true`), and JV's own `feature_prompts` table renamed
+  `jv_feature_prompts` after colliding with the shared stack's same-named table.
+
+**Open, in order:**
+1. **The rewrite itself** (`just_ai_i18n_docgen`) — still only a scaffold, not a git repo.
+   It now has a tested standard to build on: `install_llm` + four features
+   (translate/review/extract/confirm) + `feature_prompts={}` (prompts stay app-built —
+   shielding and the glossary logic are ours). Its first boot is also the first RUNTIME
+   proof of engine-download + model-load from a non-JW host, which the README says out
+   loud is still unproven.
+2. **JV part 3** — merge its prompt system into the shared prompt/preset model (6
+   call-sites, per-tier keys, per-row temperature/think → engine presets), rework the
+   SettingsView roles/routing UI (the roles dropdowns currently accept edits and silently
+   don't persist), decide local_managed vs the shared runner. UI design input needed.
+3. Everything in the earlier sections of this file (JW's ~54 identical-string findings,
+   the ~134 probe disagreements, whether Spanish ships) — unchanged.
