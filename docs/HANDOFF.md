@@ -908,3 +908,38 @@ llm-runner RUNNER path (engine download + GGUF) from a fresh host — the E2E us
 Ollama provider, so that specific claim stays unproven; JV part 3; and the decision
 this file exists to reach: when this Node repo gets archived. The rewrite now covers
 its whole surface except "look at the page first".
+
+## 2026-08-02, overnight — full JW parity, THE standard doc, and the re-review's three findings
+
+**Parity is total now, proven live.** `just_ai_i18n_docgen` matches JW in every contract:
+npm scripts (`npm run dev` = the DESKTOP APP; vite is `dev:vite`), the Rust sidecar
+(JW's pattern, three constants — the shell spawned the server and the webview's own
+requests hit /v1, watched in the log), portable data root with `dataroot.txt` +
+crash-safe relocate, port eviction, `/v1/*` everywhere (the `/api` prefix was a
+Node-era habit, renamed), `serve` subcommand + `JUST_AI_I18N_DOCGEN_DATA_DIR`,
+biome with JW's Vue override, `scripts/py.js`, real tauri.conf/index.html, CLAUDE.md.
+
+**THE standard doc** (`just-llm-runner/docs/app-structure.md`) is now generator-grade —
+creation → root files → vite/kit → frontend → shell/sidecar → server → llm-runner
+adoption → converging an existing app → a checkable definition-of-done. Deviations are
+allowed only when flagged AND recorded there.
+
+**The ordered overnight re-review found three real defects, each fixed with the test
+that would have caught it:** (1) `make_send` silently dropped topP/samplers/
+reasoningEffort — only temperature and think reached the adapter; a half-honoured Lab
+setting, the family's most-hated class — `preset_extra()` now mirrors the shared run
+path's overlay; (2) the CLI's routeless boot re-implemented install_llm's storage half
+against PRIVATE imports — upstreamed as first-class `install_llm(app=None)`
+(`just-llm-runner@c76a7c6`); (3) jobs.py claimed "THREE RULES, each of which is a
+test" while rules 2 and 3 had none — `test_jobs.py` makes the claim true.
+
+**Final battery, all green:** i18n 123 · llm-runner 718 (+known-bad lspci) · JW 121 ·
+JV 383 · clean-install 3/3 · check-consumers both apps · ruff + biome clean · vite
+build · cargo check · the live CLI re-proof (check exit 0; translate exit 0 with **0
+requests** — the delta idle on an unchanged catalogue, as designed).
+
+**What genuinely remains:** looking at the rendered UI with human eyes ·
+`npm run build`/PyInstaller packaging for the shipped sidecar binary · client
+unit/e2e test infra (JW has vitest+e2e; this app has none yet) · JV part 3 (prompt
+merge, SettingsView rework, local_managed decision) · the llm-runner RUNNER path
+runtime proof (engine download + GGUF from a fresh host) · archiving THIS repo.
