@@ -1015,3 +1015,30 @@ e2e smoke on the release build · screenshots verified in the real webview.
 unruled); sample first-run project (offered, unruled); client vitest units; release
 packaging; JV part 3 (now including its TitleBar/auth/chrome pass per the updated
 standard).
+
+## 2026-08-03 (night) — behavior verification, and the shared module made truly shared
+
+The user caught three broken flows UNDER a green suite ("when you tell me all 20 items
+are built you lie") — because the e2e asserted PRESENCE, not BEHAVIOR. The suite now
+CLICKS: the AI-tasks toggle must open, STAY open, and close on the second click (the
+bug: a missing data-panel-toggle attr made the opening click also the dismissing one);
+Routing-by-feature must show all four features (the bug: the kit workbench joined
+features with PROMPT rows and this app's feature_prompts={} starved it — fixed with
+kit-level promptless routing rows); Quick Setup must open offering TRANSLATION models
+with JW's catalog asserted ABSENT (the bug: the writing-curated DEFAULT_CATALOG seeded
+for every app; now seed_default_model_catalog=False + the app's own measured rows, and
+the catalog surface takes host-voiced copy via configureLlmUi catalogCopy — no
+embedding slot here). llama.cpp is THE local path (the engine that takes the
+switches); the wizard narrates engine-install → download → load → default, and the
+translate/confirm presets follow. 11/11 behavior smoke on the release exe · 129 server
+· kit 6/6 incl. the opt-out test. Kit `7eeaa3d`, app `66b1171`.
+
+**Rules that came out of it:** reuse with judgment ("doesn't need to be an exact copy
+of JW — reuse what makes sense"); per-app purpose-built quick setups over shared
+machinery, redesigning the shared module where sharing is hard, was ALREADY the
+decision — the miss was building a thin view over JW-shaped shared data. And:
+interactive elements are DONE only with a click-through test.
+
+**Open:** license/ctx re-audit for the 3 catalog rows (network; seed-facts-audit);
+Help system (unruled); backup/updates panels; sample project (unruled); vitest;
+packaging; JV part 3.
