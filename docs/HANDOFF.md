@@ -1042,3 +1042,30 @@ interactive elements are DONE only with a click-through test.
 **Open:** license/ctx re-audit for the 3 catalog rows (network; seed-facts-audit);
 Help system (unruled); backup/updates panels; sample project (unruled); vitest;
 packaging; JV part 3.
+
+## 2026-08-03 (stopped mid-verify) — EXACT RESUME STATE
+
+**Committed but NOT tauri-verified** (`just_ai_i18n_docgen@0fc029f` — the user stopped
+the run during `tauri build --no-bundle` + `npm test`): (1) Quick Setup is now a REAL
+MODAL (AppModal; the AI-page band = button only — the inline dropdown that read as
+"does nothing" is gone); (2) Home's three honest states — confirmed-409 welcome vs
+ConnectionError+3s-retry vs the language table (it stuck on the welcome during a
+server boot race because null meant both); (3) `.lu-setup-card:only-child` width cap
+(the huge General dropdown). Smoke additions assert: band dropdown-free, wizard opens
+`[role=dialog]`.
+
+**TO DO, in order:** 1) `npx tauri build --no-bundle` → `npm test` (13 behavior
+tests) → screenshots RE-READ AS A USER before any done-claim; 2) relaunch
+`JAID_DEV_NO_SIDECAR=1 npm run dev` for the user's own click-through (their 3 reports:
+wizard-does-nothing / stray dropdown / Home welcome-instead-of-languages — all three
+must be visibly gone); 3) network re-audit of the 3 MODEL_CATALOG rows' license/ctx
+(seed-facts-audit); 4) unruled offers: Help system, sample project; deferred:
+backup/updates panels, vitest, packaging, JV part 3.
+
+**Working rules in force (memory has them too):** behavior tests not presence; think
+twice + verify twice; verify in the Tauri webview via the e2e harness ONLY (browser
+driving banned); name-your-donor with reuse-judgment; per-app wizards over kit
+machinery, redesigning the shared module where sharing is hard; llama.cpp is THE
+local path. Demo server: scratchpad/e2e config + data (translation-only reseed),
+started with output to scratchpad/demo-server.log (never kill just the wrapper — an
+orphaned child with a dead stdout pipe HANGS requests once the pipe fills).
