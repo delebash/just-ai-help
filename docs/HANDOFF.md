@@ -983,3 +983,35 @@ rendered EMPTY in production only (JW passes the resolved base; now so do we).
 deferred, recorded; client vitest units; release packaging (PyInstaller sidecar);
 JV part 3; strip the DesignSwitcher once iteration settles; sync the two harness fixes
 back into JW's e2e.
+
+## 2026-08-03 (later) — the 20-item go: donors honoured, splash, wizard, titlebar, auth
+
+The reuse audit the user forced ("I don't trust you — check what you hand-rolled")
+found the pattern behind every gap: writing instead of asking "where does this already
+exist?". The ruling is now structural — **NAME YOUR DONOR** (app-structure.md §4):
+every UI element names its source (kit export / JW section / JV section) before it is
+written; donors are copied WHOLE, strings included. Rebuilt accordingly: Storage = JW's
+panels verbatim (picker, Type/portable row over the StorageRoot struct — the bare-String
+return was MY unflagged simplification — and the missing Clear buttons); Appearance =
+JV's rows; TitleBar = JW's (its absence was an unexplained divergence); bearer auth =
+JW's auth.py + Settings→Server (headless is first-class, so it ships lockable);
+configureExternal (About links were silently dead in the webview); translate jobs ride
+the kit aiTasks store (QC-31's batch-owner pattern — JobStrip deleted, "AI tasks" nav
+row + slide-out panel, JW Sidebar parity); UiTable + UiTag replace the hand-rolled
+table and chips; removable UiTag born in the kit.
+
+**Splash + wizard:** the user's plate (PNG→JPEG 1.8MB→114KB) boots the app with JW's
+warm-reload mechanics — the interactive layer sits in the art's clear BOTTOM strip
+(this plate is centre-composed; JW's is left-empty). First run offers the new
+**QuickSetupI18n** — the thin per-app wizard through AiModelsArea's new `wizard` seam
+(machinery in kit composables, steps/words per app; JW's embedding-woven QuickSetup
+stays JW's). Home without a project is a real welcome. "Catalogue" is out of the UI.
+
+**JW fixed** (`f345de6`): WebView2-runtime driver detection, System32 tar pin, dead
+wdio deps dropped. Kit `574be1a`, app `86a181e`, all pushed. 129 server tests · 9/9
+e2e smoke on the release build · screenshots verified in the real webview.
+
+**Open:** backup/restore + updates panel; Help system (kit HelpDrawer — offered,
+unruled); sample first-run project (offered, unruled); client vitest units; release
+packaging; JV part 3 (now including its TitleBar/auth/chrome pass per the updated
+standard).
