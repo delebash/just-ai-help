@@ -943,3 +943,43 @@ requests** — the delta idle on an unchanged catalogue, as designed).
 unit/e2e test infra (JW has vitest+e2e; this app has none yet) · JV part 3 (prompt
 merge, SettingsView rework, local_managed decision) · the llm-runner RUNNER path
 runtime proof (engine download + GGUF from a fresh host) · archiving THIS repo.
+
+## 2026-08-03 — Design 1 ruled, the e2e harness, and the standard app chrome
+
+**The GUI redesign ran as live iteration in the REAL app** after the user rejected
+mockups twice ("you have problems going from an approved mockup to the real app";
+"real app means tauri as webview, not equal browser"). Three switchable designs
+(temporary DesignSwitcher pill), screenshotted from the real WebView2, and **Design 1
+— sidebar + language table — is THE layout** (user pick). Setup rules ruled and
+asserted in e2e: the whole form always visible, Check-path is an explicit button,
+nothing auto-runs.
+
+**JW's e2e harness is ported and is now the family standard** (`e2e/`: tauri-driver +
+msedgedriver + raw-WebDriver driver.js; `npm test` = 9 smoke tests against the release
+build, `npm run screenshots` = every surface as PNGs). Two harness fixes over JW's
+copy, both recorded for sync-back: Git Bash's GNU tar breaks on `E:\` (pin System32
+bsdtar), and the driver must match the WEBVIEW2 RUNTIME version, not Edge's (Edge 151 /
+runtime 150 skew found live). **Driving a Chrome tab is banned** (user ruling; browser
+access revoked over it).
+
+**The standard app chrome exists now because this app shipped without ALL of it** —
+the user: "are you bringing in the data directory, the style changer, the ai progress
+cancel, the logs? did you really think about this?" Answer was no. Built the same day:
+`/ai` (kit `AiModelsArea` — providers/models/presets/usage), `AiStatusButton` in the
+shell footer, Settings (appearance over the kit engine, storage with data-root
+relocate + shared disk usage, kit `LogsPanel`, reviewer moved from Setup, about), and
+the server's platform wiring (`install_log_ring` + `install_file_log` +
+`make_logs_router` + `make_disk_router`) with content-asserting tests.
+`app-structure.md` §10 (harness) + §11 (chrome) make omission impossible to repeat;
+definition-of-done boxes added.
+
+**The real webview caught four bugs no test or dev-browser could,** which is the whole
+argument for the harness: missing CORS (silent — TestClient is same-origin), summary
+counting untranslated backlog as findings, the runtime-vs-Edge driver skew, and
+`configureLlmUi({})` defaulting its base to `tauri.localhost` so every kit LLM view
+rendered EMPTY in production only (JW passes the resolved base; now so do we).
+
+**Open:** backup/restore (`make_data_router` + kit `DataManagement`) and UpdatesPanel —
+deferred, recorded; client vitest units; release packaging (PyInstaller sidecar);
+JV part 3; strip the DesignSwitcher once iteration settles; sync the two harness fixes
+back into JW's e2e.
