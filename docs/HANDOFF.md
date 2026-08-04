@@ -1097,6 +1097,55 @@ could not, fixed on the user's go:
 Still open, unchanged: catalog license/ctx re-audit (network), Help-system + sample
 first-run project offers, deferred backup/updates/vitest/packaging, JV part 3.
 
+## 2026-08-03 (later still) — "think about the app we are making", and the two dead ends it found
+
+The user asked why select-all sat under the table and "what else is not normal". Asking
+that question OF THE APP'S PURPOSE — translate a catalogue, then have a human sign off —
+turned up two things that mattered far more than the cosmetics:
+
+- **Applying a run's output was one key at a time.** A run stages a proposal per key and
+  never writes locale files; the UI called `/v1/proposals/apply` with `keys: [one]` and
+  had no bulk path — so finishing the measured 1,965-key run meant 1,965 clicks. THE
+  SERVER HAS TAKEN A `keys[]` ARRAY ALL ALONG. Review now has "Apply all N" and
+  "Discard them" over the staged pile, both confirmed.
+- **Undo did not undo an apply.** `undo` had branches for edit/accept/bulk-accept/
+  unaccept/note and NONE for `apply`: it popped the action, answered `{"undone": …}` and
+  left the overwritten text on disk. Fixed, plus a `bulk-apply` kind whose `prev` is a
+  {key: value} map so a whole-catalogue apply stays ONE undo (the bulk-accept promise,
+  applied to writes). Two tests, both seen to fail with the branch removed.
+- **`<AppDialog />` was never mounted** (JW App.vue:213 mounts it). `confirmDialog()`
+  resolves through that host, so with no host the promise never settles — every
+  confirmed action in the app was a dead button: Change folder, Clear models cache,
+  Clear spawn logs, and the two new bulk actions. The storage smoke test asserted the
+  panel's STRINGS, which is precisely what presence-testing cannot catch. Mounted, with
+  a click-through test that opens a real confirm and cancels it.
+
+Also done: select-all moved into the checkbox column's header, which needed a new kit
+seam — `UiTable` had per-cell slots and no per-header slot, so the app had worked around
+a kit gap instead of closing it (`#head-<id>`, benefits JW/JV too). Review lands on the
+language that HAS work (it opened on the config's first language while another had a
+whole run staged) and its picker shows real names plus outstanding counts; its flag
+filter hides when there are no flags; its empty states say what is true instead of "pick
+a key" beside an empty queue. Home's "Findings" column is "Status". Runs uses the shared
+`UiTable`. In the kit, the built-in row no longer offers "Update to b10246" beside
+"Install engine" — `update_check` reports updateAvailable with nothing installed BY
+DESIGN (current falls back to the pinned build, lifecycle.py:893), so the row needed the
+`installed` clause the panel already had (LuRunnerEngine.vue:227).
+
+Reading the new screenshots as a user then found two more, both fixed: `UiSelect`'s
+`placeholder` prop was DEAD family-wide (Reka's `SelectValue` falls back to the
+placeholder only with no slot content, and the kit always passed a slot, empty string
+included) — which is why the review page's filter was a blank box with a chevron; and
+Review's header wrapped, stranding Undo on its own line. Language naming is now ONE
+module (`services/langs.js`): Home said "Spanish es" while Review and Runs said "es",
+in a tool whose whole subject is languages.
+
+DROPPED after checking: "two catalog rows show no size" is not a data gap —
+`size_bytes` is derived from the downloaded GGUF on disk (identity.py:116), so a size
+appears once it is MEASURED. Hardcoding numbers from a web page would be exactly the
+assumption this project forbids. Also dropped: "Runs duplicates Home's Translate" —
+Home links to it as "advanced runs ›", which is a deliberate two-tier design.
+
 ## 2026-08-03 (later) — "does JW have two cancel buttons?" → the wizard rewritten
 
 The user asked one question about a duplicate Cancel. It was the visible end of a
