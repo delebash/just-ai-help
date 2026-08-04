@@ -1097,6 +1097,84 @@ could not, fixed on the user's go:
 Still open, unchanged: catalog license/ctx re-audit (network), Help-system + sample
 first-run project offers, deferred backup/updates/vitest/packaging, JV part 3.
 
+## 2026-08-03 — the drop-in rethink (asked for, before more code)
+
+The user's framing: llm-runner should drop into an app the way a shared data grid does —
+you give it data, everything else works. The app supplies **features**, its **model
+rows**, its **Quick Setup GUI** and its **feature page**; everything else (AI area,
+catalog + downloads, routing, AI tasks with progress/cancel, server logs, disk, storage,
+appearance, headless auth, warm boot) arrives assembled.
+
+**Measured against that, here is what this app had to supply on top of `install_llm`:**
+mount `llm_runner.router`; `install_log_ring` + `install_file_log` + `make_logs_router` +
+`make_disk_router`; an error-envelope middleware copied from JW; CORS copied; `auth.py`
+copied VERBATIM (96 lines); `/v1/server-auth` copied. UI: four `configure*()` calls; mount
+`<Toast>` and `<AppDialog>` by hand; an AI-tasks nav row that must carry
+`data-panel-toggle` (a pattern, not a component); the `/ai` route; Settings panels copied
+from JV (appearance) and JW (storage, server/auth); `warmStartup.js` copied; the splash
+bars copied; a hand-written jobs→aiTasks bridge.
+
+**Diagnosis — the package shares MACHINERY but not ASSEMBLY.** Two asymmetries: (1) the
+Python half has one installer and the UI half has none, which is exactly how `<AppDialog/>`
+went unmounted and every confirm in the app became a dead button; (2) even server-side,
+the chrome is copied rather than installed — `auth.py` exists twice, byte-identical, and
+anything copied drifts. And every violation is SILENT: a promise that never resolves, a
+placeholder that never renders, a feature that vanishes from a list, a measured tune that
+binds to nothing.
+
+**Verdict: don't redesign the runtime — redesign the seam.** Every defect this session sat
+at the boundary; the internals (singletons, the one download-task machine, preset routing,
+the runner lifecycle, tune layering) held. Four changes:
+1. `install_llm(app, …, chrome=True)` — one server call that also mounts logs, disk, auth +
+   `/v1/server-auth`, the error envelope and CORS. Then delete `auth.py` from both apps.
+2. `installLlmUi(app, { baseUrl, wizard, catalogCopy, capabilities })` — the UI twin:
+   mounts the hosts, configures the transports, registers `/ai` + the AI settings panels,
+   ships the tasks panel / status button / nav row as COMPONENTS.
+3. Loud in dev: `confirmDialog()` with no host rejects instead of hanging; unbound tunes
+   warn (landed); unset base URL warns.
+4. An executable conformance check behind the definition-of-done — plus the kit UI's first
+   tests (it has ZERO, which is why a documented prop was dead family-wide).
+Embeddings are the same shape: `capabilities: { embeddings: false }` honoured end to end,
+instead of `catalogCopy.showEmbedding` patching the UI over data that still ships.
+Success test: after (2), this app's `main.js`/`App.vue` shrink to a few lines and JV part 3
+becomes "call two functions" rather than "port three panels". NOT STARTED — awaiting the go.
+
+## 2026-08-03 — "not tuned" was wrong, and it was the shared module's keying
+
+The user's flagship read **not tuned** on a box whose exact class HAS a measured row.
+Traced: `switch_resolve.py:128` matches `ClassTune.model_id == model_id` — a strict
+match on a HOST-CHOSEN string — while the model's real identity (`hf_repo` + `quant`)
+sits unused in the same catalog row. This app calls the model `gemma-4-26b-a4b-qat-xl`;
+JustWrite calls the identical artifact (`unsloth/gemma-4-26B-A4B-it-qat-GGUF` @
+`UD-Q4_K_XL`) `gemma-4-26b-a4b-qat`. So the row measured on the author's own 2070 SUPER
+(`n_cpu_moe 21` — "the tested floor; 20 OOMs on a 2070S") never applied, and the model
+launched on automatic fit: **ctx 16384, no n_cpu_moe at all**.
+
+Worse, the package was dishonest with itself: `gemma-4-26b-a4b-qat` is NOT in
+`DEFAULT_CATALOG` — **6 of 13 seeded tune rows resolve only because JustWrite adds that
+row app-side** (`justwrite_server/seed_presets.py:113`). Every other adopter shipped
+them as dead weight and nothing said so.
+
+**Fix (kit)**: `DEFAULT_CLASS_TUNE_IDENTITY` records what each seeded tune was measured
+on, and `link_class_tunes_to_catalog()` — LAST in `seed_llm`, after the host's extras —
+binds those rows to whatever id this catalog uses for the same `hf_repo`+`quant`,
+insert-if-missing. A tune that can bind to nothing now WARNS. Two tests; the first
+failed on the real bug it was written for (`autoflush=False` in the documented host
+session shape meant the query saw an empty catalog — `s.flush()` first).
+
+**Verified on the user's machine**: `models.ini` now carries `n-cpu-moe 21`,
+`ctx-size 32768`, `threads 8`, batch/ubatch 512; the model loaded and translated
+correctly ("¿Eliminar este capítulo?"). `n-gpu-layers 30` is the tune's `99` clamped to
+the model's real block count (`process.py:391`) — correct, not a miss.
+
+**Verified in JustWrite** (the user's call — these kit changes ride into JW): its venv
+resolves `llm_runner` to this working copy, so its **121 server tests + 560 unit tests**
+exercised the change and pass, `build:vite` is clean, and a real JW seed shows the
+linker is a NO-OP there — 13 (model, class) pairs, no copies, no warnings, every tuned
+id already in its catalog. The `UiSelect` placeholder fix touches exactly 2 JW selects
+(both already passing an intentional placeholder); the engine Update-button gate now
+matches JW's own panel rule.
+
 ## 2026-08-03 — the user's own run: Quick Setup died with [WinError 2]
 
 **Verify against the app's OWN data dir, not a scratchpad.** The user ran the real app
