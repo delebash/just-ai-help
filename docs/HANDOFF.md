@@ -1069,3 +1069,30 @@ machinery, redesigning the shared module where sharing is hard; llama.cpp is THE
 local path. Demo server: scratchpad/e2e config + data (translation-only reseed),
 started with output to scratchpad/demo-server.log (never kill just the wrapper — an
 orphaned child with a dead stdout pipe HANGS requests once the pipe fills).
+
+## 2026-08-03 — 0fc029f verified, and the second think earned its keep
+
+The resume ran as recorded: release build green, behavior suite green (the suite is
+**11 tests, not 13** — the previous entry miscounted), all 9 screenshots re-read as a
+user. The user's three reports are visibly gone (modal wizard, no stray dropdown,
+Home = the language table). The read-before-code pass then found what the green suite
+could not, fixed on the user's go:
+
+- **`setAsDefault(pick)` in the i18n wizard** — the signature is `(providerId,
+  modelId)`; as committed, finishing the wizard would have rewritten every preset's
+  providerId to a MODEL id and toasted success. Invisible to the suite (no test
+  completes a multi-GB load). Fix: `setAsDefault(LOCAL_RUNNER_ID, pick)`; trap
+  recorded in app-structure §11.
+- **Home hid staged work when done=0** — a run stages proposals, never writes locale
+  files, so the whole first run rendered as "not yet translated" beside a finished
+  Last run (the demo's fr row photographed it). Chips now show regardless of `done`;
+  new behavior test asserts the staged chip against live /v1/summary.
+- **Splash first-run gate** now `!currentDefaultProviderId` (no default AT ALL) —
+  `currentDefaultId` is local-gated, so an online-default box was nagged every boot.
+  Donor deviation (JW persists once-ever `aiSetupPrompted`) recorded in §11.
+- **Doc drift**: smoke header/README no longer claim "needs NO demo server" (the
+  suite reads live endpoints — a server on :8742 is the named precondition); the
+  driver-teardown linger is a written gotcha; stale design-candidate shots deleted.
+
+Still open, unchanged: catalog license/ctx re-audit (network), Help-system + sample
+first-run project offers, deferred backup/updates/vitest/packaging, JV part 3.
