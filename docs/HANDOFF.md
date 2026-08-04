@@ -1478,3 +1478,59 @@ this app's `main.js`/`App.vue` should shrink to a few lines and JV part 3 become
 calls), then `install_llm(chrome=True)` + deleting the duplicated `auth.py`, then
 loud dev failures + a conformance check + the kit UI's first tests. Then the
 routing-by-feature pane and the two `storage_relocate` findings.
+
+## 2026-08-04 — `installLlmUi()`: the UI half finally has an installer
+
+Kit `ui/src/installLlmUi.js` + `LlmUiHosts.vue` + `useAiTasksNav.js`; adopted by
+just_ai_i18n_docgen's `main.js`/`App.vue`.
+
+**The diagnosis this acts on** (from the drop-in rethink): the Python half has had ONE
+installer since 2026-08-01 and the UI half had none — and that asymmetry is where every
+silent breakage landed. Measured on this app: four separate `configure*()` calls,
+`<Toast>` and `<AppDialog>` mounted by hand, a nav row that had to carry an exact
+`data-panel-toggle`. Each was a step someone had to KNOW about, and each omission failed
+QUIETLY: no dialog host → `confirmDialog()`'s promise never settles and every confirmed
+action is a dead button; `configureLlmUi` with no baseUrl → `window.location.origin` =
+`tauri.localhost` → every kit LLM view empty IN PRODUCTION ONLY; no `data-panel-toggle`
+→ the panel opens and instantly closes.
+
+So the installer's job is not saving typing — it is making those states unreachable. ONE
+resolver feeds both transports. The hosts arrive as ONE tag, because the failure mode was
+mounting SOME of them. The nav row's required attribute comes from the composable
+(a composable and not a component because JW and i18n share no nav class names).
+
+**Honest scope.** `main.js` went 52 → 43 lines and `App.vue` −13 net: a modest count,
+because what remains is genuinely this app's — its catalog words and its opener. The
+win is the removed failure class, not the line count. **The route/settings-panel half of
+the original plan is NOT done**: `/ai` is already one line pointing at a 50-line app view,
+and SettingsView interleaves AI panels with app sections, so registering them from the
+installer is a real design trade rather than a mechanical move — left for the user's call.
+`capabilities` is declared and `embeddings: false` maps onto the catalog's
+`showEmbedding`; model rows still ship `embedPlacement`/`embedLeftoverMb`, and
+`llmUiCapabilities()` is the seam for finishing that, read by nothing yet (said so in
+the code).
+
+**The opener stays the APP's.** Importing `@tauri-apps/plugin-opener` inside the kit
+broke the vite build outright — it is a Tauri dependency, not the kit's, and a
+non-Tauri consumer cannot resolve it. The kit now warns loudly inside a webview when no
+opener was passed, which is the difference between a dead About link and a dead About
+link that says so.
+
+**Verified in the real webview** (release build, the family's acceptance surface): all
+14 e2e smoke tests pass, including the three that exercise exactly what changed — the
+AI-tasks row toggling and STAYING open, a confirmed action really opening its dialog
+(the host is mounted), and Quick Setup offering models (the base URL resolving through
+the installer). JW is untouched by the change but exercises the kit: 560 unit tests +
+vite build clean.
+
+**A verification mistake worth the record.** The first e2e run showed 3 failures and I
+was one step from calling them a regression. The suite's own header states the
+precondition — a server on :8742, because `JAID_DEV_NO_SIDECAR=1` means it never spawns
+one — and I had killed mine during the cache work. With the server up, all three pass.
+Read the suite's preconditions before reading its failures. (I also timed the suspected
+culprit — the registry's byte walk over a 256 GB cache — before "fixing" it: 0.03 s. The
+hypothesis was wrong and measuring is what said so.)
+
+**Note on the harness**: `npm test` prints every result and then HANGS in driver
+teardown; the run has to be killed once (never in a loop). The per-test lines are the
+evidence.
