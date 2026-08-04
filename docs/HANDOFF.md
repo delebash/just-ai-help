@@ -1097,6 +1097,47 @@ could not, fixed on the user's go:
 Still open, unchanged: catalog license/ctx re-audit (network), Help-system + sample
 first-run project offers, deferred backup/updates/vitest/packaging, JV part 3.
 
+## 2026-08-03 — the user's own run: Quick Setup died with [WinError 2]
+
+**Verify against the app's OWN data dir, not a scratchpad.** The user ran the real app
+(`npm run dev` → data at `src-tauri/target/debug/data`) while every check here pointed at
+a scratchpad config + data dir on :8742. Their run even EVICTED the demo server. Their
+instruction: "you should be running the same app as me — everything should be the same as
+what we both see." Do that: same app, same data dir, same server.
+
+**What happened**: the engine installed (b9993, 237 MB), the 14 GB model downloaded, and
+the router spawn raised `FileNotFoundError [WinError 2]` against
+`…\b9993\cuda12\llama-server.exe`. Diagnosed against their data dir: the path EXISTED,
+the exe ran by hand (`--version` → 9993, exit 0), all 55 files/33 DLLs had extracted at
+21:26 — a full two minutes before the 21:28:45 spawn — and the same router argv started
+and served `/health` when run manually. So the binary was fine and the failure was
+TRANSIENT: on Windows a freshly installed engine is routinely still held by the real-time
+virus scanner, and CreateProcess then answers ERROR_FILE_NOT_FOUND for a file that exists.
+
+**Two real defects, both fixed in the kit** (`runner/process.py`):
+1. `_spawn_child` now RETRIES a transient Windows spawn error (WinError 2 / 5, four
+   attempts with backoff) — the case self-heals instead of ending the run.
+2. It raises `RunnerStartError`, never a bare OSError. That matters twice over:
+   `_spawn_router_with_fallback` catches only RunnerStartError, so the OSError skipped
+   the chain across other installed backends AND reached the user as a raw
+   "[WinError 2] The system cannot find the file specified". The message now names the
+   binary and distinguishes "on disk — probably a scanner, try again" from "missing —
+   reinstall the engine".
+   Three tests (retry-then-succeed, never-starts → RunnerStartError with the right
+   words, non-transient error not retried). Kit suite: 722 pass; the one failure
+   (`test_pci_gpus_linux_lspci_name_match`) is a Linux sysfs path with colons and fails
+   on Windows with the changes STASHED — pre-existing, proven. Kit commit `cbb4a04`.
+
+**Then verified the whole chain on that machine**: POST /load → router spawned → status
+`running` → a chat call returned "Guardar". NEAR-MISS worth remembering: a raw call with
+`max_tokens: 400` came back with EMPTY content and `reasoning_content` full — the
+thinking-model trap this repo's CLAUDE.md documents. That was MY naive request, not a
+defect: the kit's `openai_compat._apply_reasoning` already sends
+`chat_template_kwargs.enable_thinking=false` + `reasoning_budget_tokens=0` for
+`local-llamacpp` when the preset says `think: False`, and the app's translate/confirm
+presets do. Sending the app's own shape returned the correct translation in 3 tokens.
+Check the adapter before reporting an engine bug from a hand-rolled request.
+
 ## 2026-08-03 (later still) — "think about the app we are making", and the two dead ends it found
 
 The user asked why select-all sat under the table and "what else is not normal". Asking
