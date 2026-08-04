@@ -1097,6 +1097,68 @@ could not, fixed on the user's go:
 Still open, unchanged: catalog license/ctx re-audit (network), Help-system + sample
 first-run project offers, deferred backup/updates/vitest/packaging, JV part 3.
 
+## 2026-08-03 — the mistake catalogue (written at the user's request, pre-compact)
+
+Kept in memory as `mistakes-to-avoid.md`; duplicated here so the repo carries it too.
+Every item is a real instance from this session.
+
+**Verification & environment.** Testing a DIFFERENT app than the user runs (scratchpad
+config/data while they ran the real one — their launch even evicted my server); repeating
+it minutes after being corrected (started JW's server with no data-dir, read
+`b9899, installed=False` from a near-empty default root and nearly called it a finding);
+leaving spawned processes alive (a loaded model's router held port 8080 and broke JW);
+verifying THROUGH A PIPE (`npm test | tail` reports tail's exit code — a failing suite
+looked like exit 0); arming a destructive repeating loop (a Monitor kept `taskkill`ing
+tauri-driver every 5 s; TaskStop killed the wrapper, not the loop — two suites then failed
+13/13 in 4 s and I briefly treated it as real); claiming a result from partial output
+("all 13 passed" from skimming ticks in a tail, when the run had failed).
+
+**Engineering.** Presence-testing instead of behaviour (a dead wizard, dead routing and a
+dead toggle all shipped green); naming a donor in a comment without READING its states
+(the wizard invented completion → three hangs + two controls labelled Cancel); guessing API
+fields that do not exist (`sizeLabel`, `qualityRank`, a `sleeping` status — all fail
+silently); a wrong signature from memory (`setAsDefault(pick)` wrote a model id into the
+provider slot behind a success toast); forgetting a required host (`<AppDialog/>` unmounted
+→ every confirm's promise never settled); working around a KIT gap inside the app
+(select-all in a footer because UiTable had no header slot); writing a test that encoded a
+broken environment (it failed the moment the fix worked); nearly reporting two false bugs
+from hand-rolled probes (a chat call missing the thinking-off keys the adapter sends; a
+tauri-driver probe missing `--native-driver`).
+
+**Process.** Coding when asked to think — twice, including an explicit "no coding";
+burying the answer to a direct question under tool noise; claiming a capability gap without
+checking the siblings ("nothing can screenshot the window" when JW's harness already did).
+
+## 2026-08-03 — JW "broke": a shared router port, not a regression
+
+The user reported JustWrite loading and then failing on the model. It was NOT a code
+regression and NOT their data: `/models/load 'gemma-4-26b-a4b-qat'` answered **404 File
+Not Found** 31 ms after "spawning llama-server router" — no fresh llama-server replies
+that fast. Port 8080 was held by a llama-server the I18N app had left running (my
+verification), and that router serves only `gemma-4-26b-a4b-qat-xl`, so JW's id 404'd.
+JW's DB, its 13.27 GB model, its MTP draft and its b10107 engine were all intact — every
+path checked on disk. **No reset, no re-download.** Killing the leftover freed the port.
+
+Root cause is a shared constant: `DEFAULT_PORT = 8080` (`runner/process.py:40`), passed
+through at `lifecycle.py:2346` with no per-app override — every family app spawns its
+router on the same port, so two cannot run at once.
+
+**And the sharing is inverted.** The two apps hold the SAME model twice —
+`unsloth/gemma-4-26B-A4B-it-qat-GGUF @ UD-Q4_K_XL`, snapshot `7b92b5b2…`,
+**14,249,047,104 bytes in both caches** — plus two llama.cpp installs (JW b10107, i18n
+b9993, `ggml-cuda.dll` 533 MB each). Identical, content-addressed gigabytes get
+duplicated while a scarce exclusive resource gets shared.
+
+**RULED (user, 2026-08-03):** there should be a mechanism to share one engine + model
+directory — **auto-detect an existing family cache during Quick Setup and ASK, with the
+user able to override** if they want a separate AI cache for that app. Plus: make the
+router port per-app (derive it from the app's own server port). Never silently relocate
+what a user already downloaded. Per-app DB, logs and projects stay per-app.
+
+NB the ids were NOT changed by any of this work: JW is `gemma-4-26b-a4b-qat`, i18n is
+`gemma-4-26b-a4b-qat-xl`, both pointing at the identical file. The tune fix binds by
+identity precisely so the strings need not match.
+
 ## 2026-08-03 — the drop-in rethink (asked for, before more code)
 
 The user's framing: llm-runner should drop into an app the way a shared data grid does —
