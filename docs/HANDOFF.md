@@ -1534,3 +1534,58 @@ hypothesis was wrong and measuring is what said so.)
 **Note on the harness**: `npm test` prints every result and then HANGS in driver
 teardown; the run has to be killed once (never in a loop). The per-test lines are the
 evidence.
+
+## 2026-08-04 — RESUME HERE (stopped for a reboot)
+
+**Everything is committed and pushed. All four repos are clean and in sync.**
+
+| Repo | HEAD | branch |
+|---|---|---|
+| `just-llm-runner` | `16ab338` | main |
+| `just_ai_i18n_docgen` | `b5cab17` | main |
+| `justwrite-app` | `8c9105a` | master |
+| `just-ai-help` | this commit | main |
+
+Nothing is mid-flight: no half-applied edit, no stashed work, no background job.
+The user's own JustWrite was running at the stop (its router on **:8080** — the
+preferred port, which is exactly right for a single app on the box; allocation only
+moves it when something else already holds it). The family registry has its two
+correct rows, each app at its own cache.
+
+**Done tonight, in the order the user approved ("your recs go"):**
+1. The router port is allocated, and the local adapter follows it (`58abe3b`).
+2. One AI cache for the family — detected, offered, applied live, never moved
+   (`bfbad21` + `c68cdf3`, app `853114d`, JW `b986d18`).
+3. `installLlmUi()` — the UI half's installer (`16ab338`, app `b5cab17`). PARTIAL by
+   intent: see its handoff section for what was deliberately left.
+Plus JW's headless docs, reviewed and landed from the working tree (`8c9105a`).
+
+**NEXT, in order — nothing here has been started:**
+1. **`install_llm(app, …, chrome=True)`** — one server call that also mounts the log
+   ring + file log + logs router + disk router, the error-envelope middleware, CORS,
+   and auth + `/v1/server-auth`. Then DELETE `auth.py` from both apps (it exists
+   twice, byte-identical, and anything copied drifts).
+2. **The rest of `installLlmUi`** — registering `/ai` and the AI Settings panels. Left
+   deliberately: `/ai` is already one line pointing at a 50-line app view, and
+   SettingsView interleaves AI panels with app-specific sections, so this is a design
+   trade rather than a mechanical move. **Ask before doing it.**
+3. **Loud dev failures + a conformance check + the kit UI's FIRST tests.** The test
+   harness needs an `npm install` in `just-llm-runner/ui` — the user's standing rule
+   is no installs without an explicit go, so ASK first.
+4. **`capabilities: { embeddings: false }` end to end** — declared and honoured for the
+   catalog slot; model rows still ship `embedPlacement`/`embedLeftoverMb`.
+   `llmUiCapabilities()` is the seam, read by nothing yet.
+5. Older, still open: the routing-by-feature pane (resolved model + params inline, a
+   model picker, an example test translation); the two `storage_relocate` findings
+   (a SYNC Tauri command that freezes the window on a multi-GB move, and JW's dropped
+   empty-path guard); backup/restore + updates panel; the Help system; a sample
+   first-run project; client vitest; PyInstaller packaging; JV part 3.
+
+**Two observations, flagged and NOT acted on:** `just_ai_i18n_docgen/dist` is
+gitignored and untracked, which contradicts app-structure.md §12 ("`dist/` committed");
+and that app has no user-facing docs at all (its README is still the Tauri scaffold).
+
+**How to re-verify anything here:** the e2e suite needs a server on :8742 first
+(`npm run server` — `JAID_DEV_NO_SIDECAR=1` means it never spawns one), and it drives
+`target/release/`, so `npm run tauri build -- --no-bundle` before `npm test`. It prints
+every result and then HANGS in driver teardown; kill it once, never in a loop.
