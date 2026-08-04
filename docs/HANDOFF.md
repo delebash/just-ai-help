@@ -1399,3 +1399,82 @@ data move freezes the window; (2) JW's `if new_root.is_empty() → Err("empty pa
 guard was dropped in the port (unreachable from the current UI, which passes a picked
 path, but it is the donor's guard). Also noted: the kit's `ui/` has NO tests at all,
 which is why donor drift only ever surfaces in app-level e2e.
+
+## 2026-08-04 — the two family resources, fixed in opposite directions
+
+The user's go was "your recs", in the order recommended: the live port bug first,
+then the shared cache, then the drop-in seam. Items 1 and 2 are DONE, verified and
+pushed; item 3 onward is untouched.
+
+**The router port is allocated now, and nothing may assume it** (kit `58abe3b`).
+`DEFAULT_PORT = 8080` is only where `find_free_port` starts looking; the spawn binds
+a port nobody holds. The failure it ends is worse than a collision: the second app's
+llama-server could not bind, and `_wait_until_healthy` PASSED ANYWAY because
+`/health` on that port was answered by the FIRST app's router — so JW's
+`/models/load` reached the i18n engine and 404'd in 31 ms. **Health-by-port is not
+identity.** Consequence on the llm/ side: a `local-llamacpp` provider's stored
+`baseUrl` is a guess, so `openai_compat._api_base` resolves per request through the
+new `set_local_runner_base_url` seam (install.py → `RunnerService.router_url`, the
+twin of the ensure-local hook) and REFUSES to fall back when the router is down —
+falling back is the original defect, because :8080 may well answer as somebody
+else's engine. `openai-compat` (LM Studio, vLLM) is never touched: that URL is the
+user's own. No DB migration; the seeded row stays as the no-runner fallback.
+Verified live in the i18n app's own server against its own dev data dir with :8080
+held by a stand-in sibling: router on **:8081**, and `/v1/ai/embeddings` through the
+registry adapter answered in 0.476 s with llama.cpp's own 501. Negative control:
+:8080 never answers (curl exit 28 at 5 s), :8081 returns `{"status":"ok"}`.
+
+**One AI cache for the family, detected and offered** (kit `bfbad21` + `c68cdf3`,
+i18n `853114d`, JW `b986d18`). The sharing was exactly inverted: identical
+content-addressed gigabytes duplicated per app, while the one exclusive resource was
+shared. **The half that makes sharing safe is the split**: `cache_root` (hf weights +
+llamacpp builds) may be shared; `runtime_root` (`models.ini` + spawn logs) never can,
+because each app RENDERS that ini from its own catalogue — share it and each app
+overwrites the other's, then the next bounce re-reads a preset describing somebody
+else's models. `runtime_root` defaults to the legacy in-cache location, so an app
+with its own cache is byte-identical to before and nothing migrates.
+`install_llm(product=…)` registers the app in `%LOCALAPPDATA%\just-ai\caches.json`;
+`GET/PUT /v1/ai/engine-cache` reports and records; the choice APPLIES LIVE while the
+engine is idle (Quick Setup asks before the first download — a setting that waited
+for a restart would be contradicted by the download the same wizard starts) and
+**nothing on disk ever moves**, which is what makes it reversible. `disk/usage`
+measures the cache in USE via `configured_service()` — `get_service()` invents a
+`~/.cache` service instead of admitting there is none.
+
+The wizard asks in its confirm step, only when a sibling cache actually HAS something,
+driven by the select's own EVENT rather than a watcher: openWizard pre-selects the
+recommendation, and a watcher cannot tell that assignment from a click, so it would
+silently switch while claiming to ask.
+
+**Three defects found by RUNNING it, each fixed with a test that fails without the
+fix.** (1) The registry is machine-wide and three repos' pytest runs wrote their
+`pytest-of-<user>/…` paths into the author's REAL one within minutes — `register()`
+is now a no-op under pytest unless `JUST_AI_HOME` is set, and the guard lives in the
+library because "every consumer's conftest remembers" is the protected-by-luck
+pattern that has already cost this codebase a dependency, a placeholder and a shared
+port. (2) Sharing listed "keep my own" TWICE — the app's own registry row from boot
+was not excluded alongside the root in use. (3) A row keyed by (product, cacheRoot)
+made a re-point ADD a row: after one switch and one switch back the app was listed
+against both roots. The install is what has a cache, so the key is (product, dataDir).
+
+Verified live with both apps against their OWN dev data dirs. JustWrite registered
+its real cache — **256.6 GB of models, b10107**. The i18n app was offered it (11
+models, including the very repo it holds its own 30 GB copy of); sharing applied
+instantly (engine flipped to JW's b10107 exe, disk/usage to 256.6 GB with
+`cacheShared` true, runtimeRoot to the app's own `ai-runtime`, exactly one option
+offered); switching back restored b9993, `stored: ""`, `shared: false`. Suites: kit
+754 pass (the 1 failure is the documented Linux-sysfs test that fails on Windows
+unchanged), consumers clean, JW 121 server + 560 unit, i18n 130 server + biome +
+vite build.
+
+**Noted, not acted on:** `just_ai_i18n_docgen/dist` is GITIGNORED and untracked,
+which contradicts app-structure.md §12 ("`dist/` committed"). Pre-existing; flagged
+rather than changed. And that app has no user-facing docs at all (its README is still
+the Tauri scaffold), so the wizard's own copy plus the kit docs are where this
+behaviour is written down.
+
+**OPEN, in order:** the drop-in seam — `installLlmUi(app, …)` (the biggest payoff:
+this app's `main.js`/`App.vue` should shrink to a few lines and JV part 3 become two
+calls), then `install_llm(chrome=True)` + deleting the duplicated `auth.py`, then
+loud dev failures + a conformance check + the kit UI's first tests. Then the
+routing-by-feature pane and the two `storage_relocate` findings.
