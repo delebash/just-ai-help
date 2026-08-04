@@ -1096,3 +1096,76 @@ could not, fixed on the user's go:
 
 Still open, unchanged: catalog license/ctx re-audit (network), Help-system + sample
 first-run project offers, deferred backup/updates/vitest/packaging, JV part 3.
+
+## 2026-08-03 (later) — "does JW have two cancel buttons?" → the wizard rewritten
+
+The user asked one question about a duplicate Cancel. It was the visible end of a
+process failure they then named: the wizard NAMED the kit's `QuickSetup` in its header
+but nobody read the donor's states, so the look was copied and the completion logic was
+invented. Reading `QuickSetup.vue` apply() (:441) + its two task watchers (:404-419)
+answered everything the invented version got wrong.
+
+**The donor's model, now this wizard's model**: a step machine (confirm → apply → done)
+that advances on TERMINAL TASK STATES from `createDownloadTask` — done, error and
+cancelled all land somewhere the user can act on. The old version watched a derived
+model status behind a `busy` flag: ONE happy path, and three real hangs — an
+already-resident model (its row never changes, so the watcher never fires), a
+failed/cancelled engine install (`retryLoad` swallows errors and never throws), and a
+cancelled download. Also fixed by the rewrite: routing is written at run START (donor
+order — a cancelled download still leaves a configured default), the footer has NO
+buttons during a run and the modal is `:closable="false"`, so each bar's own Cancel is
+the only cancel on screen.
+
+**The bug the question exposed** was worse than the duplicate control: `setAsDefault`
+takes `(providerId, modelId)`, and the old call passed the model alone. REPRODUCED on a
+build with the bug restored — the demo project's presets came back
+`providerId: "gemma-4-26b-a4b-qat-xl", model: ""`, i.e. a model id in the provider slot,
+with a success toast on screen.
+
+**Verification** (the bite rule, honoured for once by demonstration rather than
+assertion): the new `quick setup RUNS` behavior test drives the real wizard — asserts
+one Cancel at a time, no footer Cancel during a run, the modal locked while running, the
+routing WRITE is valid, and that the run reaches a terminal with Retry rather than a
+permanent "Working…". It then restores the presets it changed and verifies the restore.
+On the deliberately-broken build it FAILS with `actual: 'gemma-4-26b-a4b-qat-xl'`; on
+the fixed build the suite is 13/13. Kit change: `createDownloadTask` + the three
+channels are now exported from the kit root (an app-local wizard could not reach the
+machinery — which is why it invented its own).
+
+**Reading the wizard shot as a user found three more guesses**, all of the same kind —
+fields referenced without checking the endpoint. `sizeLabel` and `qualityRank` are NOT
+on the `/v1/llm-runner/models` row (the kit says so at useCatalogMeta.js:24: that view
+is fit-shaped); the size never rendered and the "best first" sort silently fell back to
+insertion order. The rank, size and blurb live on `/v1/ai/model-catalog` via
+`useCatalogMeta` — the composable the kit exports FOR app wizards, which this one
+ignored. Now sorted by `qualityById`, labelled with the real download size, with the
+donor's "About this model" line. Also: user-facing copy no longer cites `docs/models.md`
+(a repo path in a shipped dialog). REMAINING DATA GAP: only the flagship row carries
+`sizeBytes` — rows 2 and 3 show no size until MODEL_CATALOG gets real figures (folds
+into the deferred catalog re-audit).
+
+**The test earned its keep twice.** Besides failing on the restored bug, it caught a
+regression the rewrite itself introduced: `openWizard` cleared the pick and refilled it
+only after the catalog refreshes, so a click the instant the dialog appeared hit a
+DISABLED button and no run started. The donor has a step for exactly that (detect,
+QuickSetup.vue:278) — ported: the model list, the ranking and the engine status now
+prime together, and only then is anything offered. Final state: 13/13, `TEST_EXIT=0`.
+
+**Two self-inflicted verification failures, worth remembering.** (1) A `Monitor`
+cleanup loop I left armed kept running `taskkill /F /IM tauri-driver.exe` every 5
+seconds — TaskStop killed its wrapper, not the loop (the same orphan hazard as the demo
+server). Two full suites failed 13/13 in 4 seconds with `ECONNREFUSED :4444` and I
+briefly mistook it for a real breakage. Kill the loop's own bash PID, not just the task.
+(2) `npm test 2>&1 | tail -6` REPORTS EXIT 0 EVEN WHEN THE SUITE FAILS — a pipeline's
+status is the last command's. Never verify through a pipe; run bare and echo `$?`.
+
+**Audited the rest of this session's ports** rather than trusting the labels:
+`auth.py` dispatch is byte-identical to JW's, `warmStartup.js` and the splash bars are
+faithful, the jobs-store aiTasks bridge follows the QC-31 batch-owner rule (one task
+owns the run; its abort cancels the server job and clears the queue). TWO findings in
+`storage_relocate`, NOT yet fixed, awaiting a go: (1) it is a SYNC `#[tauri::command]`
+where JW's is `async` — a Tauri sync command runs on the main thread, so a multi-GB
+data move freezes the window; (2) JW's `if new_root.is_empty() → Err("empty path")`
+guard was dropped in the port (unreachable from the current UI, which passes a picked
+path, but it is the donor's guard). Also noted: the kit's `ui/` has NO tests at all,
+which is why donor drift only ever surfaces in app-level e2e.
